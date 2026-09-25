@@ -49,7 +49,25 @@ foreach ($spendMonthRows as $_r) $spendMonth += convertSpend((float)$_r['s'], (i
 $channelsActive = (int) $db->query("SELECT COUNT(*) FROM ad_channels WHERE active=1")->fetchColumn();
 $unmatchedOpen = (int) $db->query("SELECT COUNT(*) FROM unmatched_leads WHERE resolved=0")->fetchColumn();
 
-// ---------- Top campaign (trong khoảng đã chọn) ----------
+// ---------- Top campaign (trong khoảng đã chọn, chỉ lấy camp đã gán vào channel) ----------
+$assignedCamps = [];
+$credHasFilter = [];
+$chRows = $db->query("
+  SELECT cc.credential_id, ch.platform_campaign_id
+  FROM ad_channels ch
+  JOIN channel_credentials cc ON cc.channel_id = ch.id
+  WHERE ch.active = 1
+")->fetchAll();
+foreach ($chRows as $_ch) {
+    $cid = (int)$_ch['credential_id'];
+    if (!empty($_ch['platform_campaign_id'])) {
+        $credHasFilter[$cid] = true;
+        foreach (array_filter(array_map('trim', explode(',', $_ch['platform_campaign_id']))) as $_campId) {
+            $assignedCamps[$_campId] = true;
+        }
+    }
+}
+
 $topCampaigns = $db->query("
   SELECT s.credential_id, s.campaign_id,
     COALESCE(camp.name, s.campaign_id) AS camp_name,
@@ -63,6 +81,12 @@ $topCampaigns = $db->query("
   WHERE s.spend_date BETWEEN '$startDate' AND '$endDate'
   GROUP BY s.credential_id, s.campaign_id, camp_name, cr.platform, cr.account_label
 ")->fetchAll();
+
+// Filter: chỉ giữ campaign đã gán, hoặc tất cả nếu cred không có filter
+$topCampaigns = array_values(array_filter($topCampaigns, function($tc) use ($assignedCamps, $credHasFilter) {
+    if (!isset($credHasFilter[(int)$tc['credential_id']])) return true;
+    return isset($assignedCamps[$tc['campaign_id']]);
+}));
 
 foreach ($topCampaigns as &$tc) {
     $lp = $db->prepare("SELECT COUNT(*) t, COUNT(DISTINCT dup_key) u FROM leads WHERE platform_campaign_id = ? AND created_at BETWEEN ? AND ?");
