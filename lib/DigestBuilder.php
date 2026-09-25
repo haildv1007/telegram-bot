@@ -78,9 +78,8 @@ class DigestBuilder {
             $chUnique = count(array_unique($allKeys));
             $chCpl = $chUnique > 0 ? round($chSpend / $chUnique) : 0;
 
-            $lines[] = "";
-            $lines[] = "📊 Tổng channel: Leads {$chTotal} (u:{$chUnique}) · CPL " . number_format($chCpl, 0, ',', '.') . "đ";
-            $lines[] = "  Ngân sách " . number_format($chSpend, 0, ',', '.') . "đ";
+            $lines[] = "  ———";
+            $lines[] = "  Tổng: Leads {$chTotal} (u:{$chUnique}) · CPL " . number_format($chCpl, 0, ',', '.') . "đ · Ngân sách " . number_format($chSpend, 0, ',', '.') . "đ";
 
             $grpSpend += $chSpend;
             $grpKeys = array_merge($grpKeys, $allKeys);
