@@ -124,16 +124,6 @@ include __DIR__ . '/layout.php';
       <div class="form-help">Dùng khi setwebhook, tránh call giả mạo. Tự đặt chuỗi bất kỳ, hệ thống sẽ dùng khi set webhook.</div>
     </div>
 
-    <?php if ($editing): ?>
-    <h4 style="margin-top:24px;margin-bottom:12px;font-size:13px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);">AI Chatbot (Thư Ký Kim)</h4>
-    <div class="form-group">
-      <label class="form-label">Gemini API Key</label>
-      <input type="text" name="gemini_api_key" class="form-control mono"
-             value="<?= h($editing['gemini_api_key'] ?? '') ?>" placeholder="AIzaSy... (để trống = dùng key mặc định trong config)">
-      <div class="form-help">Key riêng cho bot này. Để trống sẽ dùng GEMINI_API_KEY trong config.php.</div>
-    </div>
-    <?php endif; ?>
-
     <div class="form-check">
       <input type="checkbox" name="is_default_reporter" id="def" <?= !empty($editing['is_default_reporter']) ? 'checked' : '' ?>>
       <label for="def">Đặt làm bot gửi báo cáo mặc định (fallback khi channel chưa chọn bot)</label>
@@ -195,6 +185,53 @@ include __DIR__ . '/layout.php';
 </div>
 
 <?php endif; ?>
+
+<!-- Gemini API Key -->
+<div class="card mt-4">
+  <div class="card-header">
+    <h3>AI Chatbot — Gemini API Key</h3>
+  </div>
+  <div style="padding:16px">
+    <div class="form-help mb-3">Key riêng cho từng bot. Để trống sẽ dùng GEMINI_API_KEY mặc định trong config.php.</div>
+    <table class="table">
+      <thead>
+        <tr><th>#</th><th>Bot</th><th>Gemini API Key</th><th></th></tr>
+      </thead>
+      <tbody>
+        <?php foreach ($bots as $b): ?>
+        <tr>
+          <td class="mono text-dim">#<?= $b['id'] ?></td>
+          <td><strong><?= h($b['name']) ?></strong></td>
+          <td>
+            <input type="text" class="form-control mono" id="gemini-key-<?= $b['id'] ?>" style="font-size:13px"
+                   value="<?= h($b['gemini_api_key'] ?? '') ?>" placeholder="Để trống = dùng key mặc định">
+          </td>
+          <td><button class="btn btn-sm btn-primary" onclick="saveGeminiKey(<?= $b['id'] ?>)">Lưu</button></td>
+        </tr>
+        <?php endforeach; ?>
+        <?php if (empty($bots)): ?>
+        <tr><td colspan="4" class="text-muted" style="text-align:center;padding:16px;">Chưa có bot nào.</td></tr>
+        <?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+async function saveGeminiKey(botId) {
+  const key = document.getElementById('gemini-key-' + botId).value;
+  const form = new FormData();
+  form.append('bot_id', botId);
+  form.append('gemini_api_key', key);
+  const r = await fetch('api/save_gemini_key.php', { method: 'POST', body: form, credentials: 'same-origin' });
+  const data = await r.json();
+  if (data.ok) {
+    alert('Đã lưu Gemini API Key cho bot #' + botId);
+  } else {
+    alert('Lỗi: ' + (data.error || 'Không rõ'));
+  }
+}
+</script>
 
 <!-- Webhook Management -->
 <div class="card mt-4">
