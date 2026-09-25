@@ -63,10 +63,13 @@ $isNew = isset($_GET['new']);
 $showForm = $editing || $isNew;
 
 $rules = $db->query('
-  SELECT r.*, c.name AS channel_name
+  SELECT r.*,
+    (SELECT GROUP_CONCAT(c2.name SEPARATOR ", ")
+     FROM rule_channels rc2 JOIN ad_channels c2 ON c2.id = rc2.channel_id
+     WHERE rc2.rule_id = r.id) AS channel_names,
+    (SELECT COUNT(*) FROM rule_channels rc3 WHERE rc3.rule_id = r.id) AS channel_count
   FROM lead_rules r
-  LEFT JOIN ad_channels c ON c.id = r.channel_id
-  ORDER BY r.channel_id, r.priority DESC, r.id
+  ORDER BY r.priority DESC, r.id
 ')->fetchAll();
 
 include __DIR__ . '/layout.php';
@@ -210,7 +213,7 @@ function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;'
       <?php foreach ($rules as $r): ?>
       <tr>
         <td class="mono text-dim">#<?= $r['id'] ?></td>
-        <td><?= $r['channel_name'] ? h($r['channel_name']) : '<span class="text-dim">Chưa gắn</span>' ?></td>
+        <td><?= $r['channel_names'] ? '<span class="badge badge-accent">' . (int)$r['channel_count'] . '</span> ' . h($r['channel_names']) : '<span class="text-dim">Chưa gắn</span>' ?></td>
         <td>
           <span class="badge <?= $r['match_type']==='regex'?'badge-warn':'badge-muted' ?>"><?= h($r['match_type']) ?></span>
           <span class="text-muted"><?= h($r['match_field']) ?></span>

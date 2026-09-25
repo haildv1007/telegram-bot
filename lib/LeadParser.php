@@ -5,12 +5,12 @@
 class LeadParser {
 
     public static function loadRulesFor(PDO $db, ?string $sourceChatId = null): array {
-        // Rules cho channel có source_chat_id khớp, hoặc channel không gán chat cụ thể
         if ($sourceChatId !== null) {
             $sql = '
-              SELECT r.*, c.source_chat_id AS ch_chat
+              SELECT r.*, rc.channel_id, c.source_chat_id AS ch_chat
               FROM lead_rules r
-              JOIN ad_channels c ON c.id = r.channel_id
+              JOIN rule_channels rc ON rc.rule_id = r.id
+              JOIN ad_channels c ON c.id = rc.channel_id
               WHERE r.active = 1 AND c.active = 1
                 AND (c.source_chat_id IS NULL OR c.source_chat_id = ?)
               ORDER BY r.priority DESC, r.id
@@ -19,9 +19,10 @@ class LeadParser {
             $stmt->execute([$sourceChatId]);
         } else {
             $sql = '
-              SELECT r.*
+              SELECT r.*, rc.channel_id
               FROM lead_rules r
-              JOIN ad_channels c ON c.id = r.channel_id
+              JOIN rule_channels rc ON rc.rule_id = r.id
+              JOIN ad_channels c ON c.id = rc.channel_id
               WHERE r.active = 1 AND c.active = 1
               ORDER BY r.priority DESC, r.id
             ';

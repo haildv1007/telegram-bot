@@ -5,6 +5,21 @@
  */
 class DigestBuilder {
 
+    private static function getSpendConverter(PDO $db): callable {
+        require_once __DIR__ . '/CurrencyHelper.php';
+        $rate = CurrencyHelper::getRate($db);
+        $currencyMap = [];
+        foreach ($db->query('SELECT id, currency FROM ads_credentials')->fetchAll() as $r) {
+            $currencyMap[(int)$r['id']] = $r['currency'] ?? 'VND';
+        }
+        return function(float $spend, int $credentialId) use ($rate, $currencyMap): float {
+            if (($currencyMap[$credentialId] ?? 'VND') === 'USD') {
+                return $spend * $rate;
+            }
+            return $spend;
+        };
+    }
+
     public static function buildForGroup(PDO $db, int $groupId, string $reportDate): ?string {
         $g = $db->prepare('SELECT * FROM channel_groups WHERE id = ?');
         $g->execute([$groupId]);
@@ -20,6 +35,8 @@ class DigestBuilder {
         $rangeStart = $monthStartDate . ' 00:00:00';
         $rangeEnd = $reportDate . ' 23:59:59';
 
+        $convertSpend = self::getSpendConverter($db);
+
         $lines = [];
         $lines[] = "📅 TỔNG HỢP LŨY KẾ CỦA " . $group['name'] . " THÁNG " . date('m/Y', strtotime($reportDate))
                  . " (đến " . date('d/m', strtotime($reportDate)) . ")";
@@ -31,6 +48,10 @@ class DigestBuilder {
             $lines[] = "🏷 " . $ch['name'] . ":";
 
             $campRows = self::campaignMtdRows($db, $ch, $rangeStart, $rangeEnd);
+            foreach ($campRows as &$cr) {
+                $cr['spend'] = $convertSpend($cr['spend'], (int)$cr['cred_id']);
+            }
+            unset($cr);
             $chSpend = 0.0;
 
             if (empty($campRows)) {
@@ -118,7 +139,7 @@ class DigestBuilder {
             }
         }
         $q = $db->prepare("
-          SELECT s.campaign_id, COALESCE(c.name, s.campaign_id) AS name, cr.platform,
+          SELECT s.campaign_id, s.credential_id AS cred_id, COALESCE(c.name, s.campaign_id) AS name, cr.platform,
                  SUM(s.spend) AS spend, SUM(s.impressions) AS impressions, SUM(s.clicks) AS clicks,
                  SUM(s.conversions) AS conversions, MAX(s.result_label) AS result_label
           FROM ads_spend_cache s

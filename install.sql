@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS ads_credentials (
   account_id VARCHAR(50) NOT NULL,
   login_customer_id VARCHAR(50) NULL,
   account_label VARCHAR(100),
+  currency VARCHAR(5) NOT NULL DEFAULT 'VND',
   developer_token VARCHAR(255) NULL,
   client_id VARCHAR(255) NULL,
   client_secret VARCHAR(255) NULL,
@@ -105,6 +106,15 @@ CREATE TABLE IF NOT EXISTS lead_rules (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   KEY idx_channel_prio (channel_id, priority),
   CONSTRAINT fk_rule_ch FOREIGN KEY (channel_id) REFERENCES ad_channels(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7b. rule_channels (many-to-many: 1 rule → nhiều channel)
+CREATE TABLE IF NOT EXISTS rule_channels (
+  rule_id INT NOT NULL,
+  channel_id INT NOT NULL,
+  PRIMARY KEY (rule_id, channel_id),
+  CONSTRAINT fk_rc_rule FOREIGN KEY (rule_id) REFERENCES lead_rules(id) ON DELETE CASCADE,
+  CONSTRAINT fk_rc_ch FOREIGN KEY (channel_id) REFERENCES ad_channels(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 8. leads
@@ -228,7 +238,10 @@ CREATE TABLE IF NOT EXISTS app_settings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO app_settings (setting_key, setting_value) VALUES
-  ('digest_time', '07:00')
+  ('digest_time', '07:00'),
+  ('exchange_rate_multiplier', '1.095'),
+  ('usdt_vnd_rate', '25500'),
+  ('usdt_vnd_rate_updated', '')
 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value);
 
 -- 17. admin_users

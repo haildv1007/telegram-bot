@@ -56,6 +56,9 @@ class ReportBuilder {
         }
 
         // ---- Load ads rows theo từng credential ----
+        require_once __DIR__ . '/CurrencyHelper.php';
+        $exRate = CurrencyHelper::getRate($db);
+
         $spendTotal = 0.0;
         $spendSource = 'manual';
         $groups = []; // credential_id => ['cred'=>row, 'rows'=>[...]]
@@ -85,7 +88,12 @@ class ReportBuilder {
                 $ld = $lp->fetch();
                 $row['leads'] = (int) $ld['t'];
                 $row['leads_unique'] = (int) $ld['u'];
-                $spendTotal += (float) $row['spend'];
+                $rawSpend = (float) $row['spend'];
+                if (($cred['currency'] ?? 'VND') === 'USD') {
+                    $rawSpend = $rawSpend * $exRate;
+                    $row['spend'] = $rawSpend;
+                }
+                $spendTotal += $rawSpend;
             }
             unset($row);
 

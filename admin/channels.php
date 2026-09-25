@@ -65,13 +65,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ins->execute([$chId, $t . ':00', $types[$i] ?? 'summary']);
             }
 
-            // Rules: unlink old, link selected
-            $db->prepare('UPDATE lead_rules SET channel_id = NULL WHERE channel_id = ?')->execute([$chId]);
+            // Rules: many-to-many via rule_channels
+            $db->prepare('DELETE FROM rule_channels WHERE channel_id = ?')->execute([$chId]);
             $ruleIds = array_map('intval', $_POST['rule_ids'] ?? []);
-            if ($ruleIds) {
-                $ph = implode(',', array_fill(0, count($ruleIds), '?'));
-                $db->prepare("UPDATE lead_rules SET channel_id = ? WHERE id IN ($ph)")->execute(array_merge([$chId], $ruleIds));
-            }
+            $insRule = $db->prepare('INSERT IGNORE INTO rule_channels (rule_id, channel_id) VALUES (?, ?)');
+            foreach ($ruleIds as $rid) $insRule->execute([$rid, $chId]);
 
             $db->commit();
             flash('success', $id > 0 ? "Đã cập nhật channel #$id" : "Đã tạo channel #$chId");
@@ -111,8 +109,8 @@ if (isset($_GET['edit'])) {
         $q->execute([$editing['id']]);
         $editingCredIds = array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN));
 
-        // Rules cho channel này
-        $r = $db->prepare('SELECT * FROM lead_rules WHERE channel_id=? ORDER BY priority DESC, id');
+        // Rules cho channel này (many-to-many)
+        $r = $db->prepare('SELECT lr.* FROM lead_rules lr JOIN rule_channels rc ON rc.rule_id = lr.id WHERE rc.channel_id = ? ORDER BY lr.priority DESC, lr.id');
         $r->execute([$editing['id']]);
         $editingRules = $r->fetchAll();
 
@@ -144,7 +142,7 @@ $channels = $db->query("
        WHERE cc.channel_id = c.id) AS cred_labels,
     (SELECT GROUP_CONCAT(DISTINCT cr.platform) FROM channel_credentials cc JOIN ads_credentials cr ON cr.id = cc.credential_id WHERE cc.channel_id = c.id) AS cred_platforms,
     (SELECT COUNT(*) FROM channel_credentials cc WHERE cc.channel_id = c.id) AS cred_count,
-    (SELECT COUNT(*) FROM lead_rules lr WHERE lr.channel_id = c.id AND lr.active = 1) AS rule_count,
+    (SELECT COUNT(*) FROM rule_channels rc2 JOIN lead_rules lr ON lr.id = rc2.rule_id WHERE rc2.channel_id = c.id AND lr.active = 1) AS rule_count,
     br.name AS report_bot_name,
     bs.name AS source_bot_name,
     grp.name AS group_name
@@ -396,27 +394,21 @@ include __DIR__ . '/layout.php';
     </script>
 
     <?php
-    $allRules = $db->query('SELECT id, pattern, match_type, channel_id FROM lead_rules WHERE active = 1 ORDER BY id')->fetchAll();
+    $allRules = $db->query('SELECT id, pattern, match_type FROM lead_rules WHERE active = 1 ORDER BY id')->fetchAll();
     $editingRuleIds = array_column($editingRules, 'id');
     ?>
     <h4 style="margin-top:24px;margin-bottom:12px;font-size:13px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);">Rule parse lead</h4>
-    <div class="form-help" style="margin-bottom:10px">Chọn rule đã tạo sẵn để gắn vào channel này. <a href="rules.php?new=1">Tạo rule mới</a>.</div>
+    <div class="form-help" style="margin-bottom:10px">Chọn rule để gắn vào channel này. 1 rule có thể gắn nhiều channel. <a href="rules.php?new=1">Tạo rule mới</a>.</div>
     <div style="background:var(--bg);border:1px solid var(--border-strong);border-radius:4px;padding:10px;max-height:220px;overflow-y:auto">
       <?php if (empty($allRules)): ?>
         <div class="text-muted">Chưa có rule nào. <a href="rules.php?new=1">Tạo rule đầu tiên</a>.</div>
-      <?php else: foreach ($allRules as $rl):
-        $taken = $rl['channel_id'] && !in_array((int)$rl['id'], $editingRuleIds) && (int)$rl['channel_id'] !== (int)($editing['id'] ?? 0);
-      ?>
+      <?php else: foreach ($allRules as $rl): ?>
         <label class="form-check" style="padding:5px 0">
           <input type="checkbox" name="rule_ids[]" value="<?= $rl['id'] ?>"
-                 <?= in_array((int)$rl['id'], $editingRuleIds) ? 'checked' : '' ?>
-                 <?= $taken ? 'disabled' : '' ?>>
+                 <?= in_array((int)$rl['id'], $editingRuleIds) ? 'checked' : '' ?>>
           <span>
             <span class="badge <?= $rl['match_type']==='regex'?'badge-warn':'badge-muted' ?>"><?= h($rl['match_type']) ?></span>
             <span class="mono"><?= h($rl['pattern']) ?></span>
-            <?php if ($taken): ?>
-              <span class="text-muted" style="font-size:11px">(đã gắn channel khác)</span>
-            <?php endif; ?>
           </span>
         </label>
       <?php endforeach; endif; ?>

@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'account_id' => trim($_POST['account_id'] ?? ''),
             'login_customer_id' => trim($_POST['login_customer_id'] ?? '') ?: null,
             'account_label' => trim($_POST['account_label'] ?? ''),
+            'currency' => $_POST['currency'] ?? 'VND',
             'developer_token' => trim($_POST['developer_token'] ?? '') ?: null,
             'client_id' => trim($_POST['client_id'] ?? '') ?: null,
             'client_secret' => trim($_POST['client_secret'] ?? '') ?: null,
@@ -25,12 +26,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ];
         try {
             if ($id > 0) {
-                $stmt = $db->prepare('UPDATE ads_credentials SET platform=?, account_id=?, login_customer_id=?, account_label=?, developer_token=?, client_id=?, client_secret=?, refresh_token=?, active=? WHERE id=?');
-                $stmt->execute([$data['platform'], $data['account_id'], $data['login_customer_id'], $data['account_label'], $data['developer_token'], $data['client_id'], $data['client_secret'], $data['refresh_token'], $data['active'], $id]);
+                $stmt = $db->prepare('UPDATE ads_credentials SET platform=?, account_id=?, login_customer_id=?, account_label=?, currency=?, developer_token=?, client_id=?, client_secret=?, refresh_token=?, active=? WHERE id=?');
+                $stmt->execute([$data['platform'], $data['account_id'], $data['login_customer_id'], $data['account_label'], $data['currency'], $data['developer_token'], $data['client_id'], $data['client_secret'], $data['refresh_token'], $data['active'], $id]);
                 flash('success', "Đã cập nhật credential #$id");
             } else {
-                $stmt = $db->prepare('INSERT INTO ads_credentials (platform, account_id, login_customer_id, account_label, developer_token, client_id, client_secret, refresh_token, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $stmt->execute([$data['platform'], $data['account_id'], $data['login_customer_id'], $data['account_label'], $data['developer_token'], $data['client_id'], $data['client_secret'], $data['refresh_token'], $data['active']]);
+                $stmt = $db->prepare('INSERT INTO ads_credentials (platform, account_id, login_customer_id, account_label, currency, developer_token, client_id, client_secret, refresh_token, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt->execute([$data['platform'], $data['account_id'], $data['login_customer_id'], $data['account_label'], $data['currency'], $data['developer_token'], $data['client_id'], $data['client_secret'], $data['refresh_token'], $data['active']]);
                 flash('success', 'Đã thêm tài khoản Ads');
             }
         } catch (Exception $e) {
@@ -62,7 +63,27 @@ if (isset($_GET['edit'])) {
 $isNew = isset($_GET['new']);
 $showForm = $editing || $isNew;
 
+// Exchange rate settings
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_exchange') {
+    csrf_check();
+    $db->prepare("INSERT INTO app_settings (setting_key, setting_value) VALUES ('exchange_rate_multiplier', ?) ON DUPLICATE KEY UPDATE setting_value = ?")
+       ->execute([$_POST['multiplier'], $_POST['multiplier']]);
+    $db->prepare("INSERT INTO app_settings (setting_key, setting_value) VALUES ('usdt_vnd_rate', ?) ON DUPLICATE KEY UPDATE setting_value = ?")
+       ->execute([$_POST['usdt_rate'], $_POST['usdt_rate']]);
+    $db->prepare("INSERT INTO app_settings (setting_key, setting_value) VALUES ('usdt_vnd_rate_updated', ?) ON DUPLICATE KEY UPDATE setting_value = ?")
+       ->execute([date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
+    flash('success', 'Đã lưu tỷ giá');
+    header('Location: credentials.php');
+    exit;
+}
+
 $creds = $db->query('SELECT * FROM ads_credentials ORDER BY platform, id')->fetchAll();
+$exSettings = $db->query("SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('usdt_vnd_rate','exchange_rate_multiplier','usdt_vnd_rate_updated')")->fetchAll(PDO::FETCH_KEY_PAIR);
+$usdtRate = (float)($exSettings['usdt_vnd_rate'] ?? 25500);
+$multiplier = (float)($exSettings['exchange_rate_multiplier'] ?? 1.095);
+$rateUpdated = $exSettings['usdt_vnd_rate_updated'] ?? '';
+$hasUsdAccount = false;
+foreach ($creds as $c) { if (($c['currency'] ?? 'VND') === 'USD') { $hasUsdAccount = true; break; } }
 
 include __DIR__ . '/layout.php';
 ?>
@@ -106,10 +127,19 @@ include __DIR__ . '/layout.php';
       </div>
     </div>
 
-    <div class="form-group">
-      <label class="form-label">Nhãn hiển thị</label>
-      <input type="text" name="account_label" class="form-control"
-             value="<?= h($editing['account_label'] ?? '') ?>" placeholder="VD: SPF - MCC chính">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Nhãn hiển thị</label>
+        <input type="text" name="account_label" class="form-control"
+               value="<?= h($editing['account_label'] ?? '') ?>" placeholder="VD: SPF - MCC chính">
+      </div>
+      <div class="form-group" style="max-width:140px">
+        <label class="form-label">Loại tiền</label>
+        <select name="currency" class="form-select">
+          <option value="VND" <?= ($editing['currency'] ?? 'VND') === 'VND' ? 'selected' : '' ?>>VND</option>
+          <option value="USD" <?= ($editing['currency'] ?? '') === 'USD' ? 'selected' : '' ?>>USD</option>
+        </select>
+      </div>
     </div>
 
     <div id="ggFields" class="<?= $platform==='facebook'?'d-none':'' ?>" style="<?= $platform==='facebook'?'display:none':'' ?>">
@@ -176,10 +206,39 @@ document.getElementById('platformSel')?.addEventListener('change', e => {
 
 <?php else: ?>
 
+<?php if ($hasUsdAccount): ?>
+<div class="card" style="margin-bottom:20px">
+  <div class="card-header">
+    <h3>💱 Quy đổi USD → VND</h3>
+  </div>
+  <form method="post">
+    <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+    <input type="hidden" name="action" value="save_exchange">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Tỷ giá USDT/VND (Binance)</label>
+        <input type="number" name="usdt_rate" class="form-control mono" value="<?= $usdtRate ?>" step="1" style="max-width:180px">
+        <div class="form-help">Lấy từ Binance P2P. <?= $rateUpdated ? 'Cập nhật: ' . h($rateUpdated) : '' ?></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hệ số N</label>
+        <input type="number" name="multiplier" class="form-control mono" value="<?= $multiplier ?>" step="0.001" style="max-width:140px">
+        <div class="form-help">Mặc định 1.095</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Kết quả</label>
+        <div class="mono" style="padding:8px 0;font-size:16px;font-weight:600">1 USD = <?= number_format($usdtRate * $multiplier, 0, ',', '.') ?>đ</div>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Lưu tỷ giá</button>
+  </form>
+</div>
+<?php endif; ?>
+
 <div class="card">
   <table class="table">
     <thead>
-      <tr><th>#</th><th>Nền tảng</th><th>Account ID</th><th>Nhãn</th><th>Có token</th><th>Trạng thái</th><th></th></tr>
+      <tr><th>#</th><th>Nền tảng</th><th>Account ID</th><th>Nhãn</th><th>Tiền</th><th>Có token</th><th>Trạng thái</th><th></th></tr>
     </thead>
     <tbody>
       <?php foreach ($creds as $c): ?>
@@ -192,6 +251,7 @@ document.getElementById('platformSel')?.addEventListener('change', e => {
         </td>
         <td class="mono"><?= h($c['account_id']) ?></td>
         <td><?= h($c['account_label'] ?: '—') ?></td>
+        <td><span class="badge <?= ($c['currency'] ?? 'VND') === 'USD' ? 'badge-warn' : 'badge-muted' ?>"><?= h($c['currency'] ?? 'VND') ?></span></td>
         <td><?= $c['refresh_token'] ? '<span class="badge badge-success">✓</span>' : '<span class="badge badge-danger">✗</span>' ?></td>
         <td><?= $c['active'] ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-muted">Tắt</span>' ?></td>
         <td class="text-right">
@@ -208,7 +268,7 @@ document.getElementById('platformSel')?.addEventListener('change', e => {
       </tr>
       <?php endforeach; ?>
       <?php if (empty($creds)): ?>
-        <tr><td colspan="7" class="text-muted" style="text-align:center;padding:24px;">Chưa có tài khoản nào. <a href="?new=1">Thêm mới</a>.</td></tr>
+        <tr><td colspan="8" class="text-muted" style="text-align:center;padding:24px;">Chưa có tài khoản nào. <a href="?new=1">Thêm mới</a>.</td></tr>
       <?php endif; ?>
     </tbody>
   </table>
