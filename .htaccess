@@ -1,0 +1,21 @@
+# Chặn directory listing
+Options -Indexes
+
+# Chặn truy cập trực tiếp vào file nhạy cảm
+<FilesMatch "\.(sql|log|md|example\.php)$">
+    Require all denied
+</FilesMatch>
+
+# Chặn truy cập thư mục migrations, tools, lib
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(migrations|tools|lib)/ - [F,L]
+</IfModule>
+
+# Chặn file config
+<Files "config.php">
+    Require all denied
+</Files>
+<Files "config.example.php">
+    Require all denied
+</Files>
