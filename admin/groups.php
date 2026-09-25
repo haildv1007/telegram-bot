@@ -15,6 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name = trim($_POST['name'] ?? '');
         $reportBotId = (int)($_POST['report_bot_id'] ?? 0) ?: null;
         $reportChatId = trim($_POST['report_chat_id'] ?? '') ?: null;
+        $digestSchedule = $_POST['digest_schedule'] ?? 'off';
+        $digestTime = $_POST['digest_time'] ?? '07:00';
+        $digestDay = in_array($digestSchedule, ['weekly', 'monthly']) ? (int)($_POST['digest_day'] ?? 1) : null;
         if ($name === '') {
             flash('error', 'Tên nhóm không được để trống');
             header('Location: groups.php');
@@ -23,12 +26,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $db->beginTransaction();
             if ($id > 0) {
-                $db->prepare('UPDATE channel_groups SET name=?, report_bot_id=?, report_chat_id=? WHERE id=?')
-                   ->execute([$name, $reportBotId, $reportChatId, $id]);
+                $db->prepare('UPDATE channel_groups SET name=?, report_bot_id=?, report_chat_id=?, digest_schedule=?, digest_time=?, digest_day=? WHERE id=?')
+                   ->execute([$name, $reportBotId, $reportChatId, $digestSchedule, $digestTime, $digestDay, $id]);
                 $groupId = $id;
             } else {
-                $db->prepare('INSERT INTO channel_groups (name, report_bot_id, report_chat_id) VALUES (?, ?, ?)')
-                   ->execute([$name, $reportBotId, $reportChatId]);
+                $db->prepare('INSERT INTO channel_groups (name, report_bot_id, report_chat_id, digest_schedule, digest_time, digest_day) VALUES (?, ?, ?, ?, ?, ?)')
+                   ->execute([$name, $reportBotId, $reportChatId, $digestSchedule, $digestTime, $digestDay]);
                 $groupId = (int)$db->lastInsertId();
             }
 
@@ -139,7 +142,7 @@ include __DIR__ . '/layout.php';
              value="<?= h($editing['name'] ?? '') ?>" placeholder="VD: Xanh SM (gộp cả 2 domain)">
     </div>
 
-    <h4 style="margin-top:20px;margin-bottom:12px;font-size:13px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);">Nơi gửi báo cáo lũy kế (riêng cho nhóm này)</h4>
+    <h4 style="margin-top:20px;margin-bottom:12px;font-size:13px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);">Gửi báo cáo lũy kế</h4>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Bot gửi</label>
@@ -154,9 +157,58 @@ include __DIR__ . '/layout.php';
         <label class="form-label">Chat ID nhận báo cáo</label>
         <input type="text" name="report_chat_id" class="form-control mono"
                value="<?= h($editing['report_chat_id'] ?? '') ?>" placeholder="-1001234567890">
-        <div class="form-help">Bắt buộc để nhóm này tự gửi digest riêng. Bỏ trống = không gửi được (cron sẽ skip và ghi log).</div>
+        <div class="form-help">Bắt buộc để nhóm này tự gửi digest. Bỏ trống = không gửi.</div>
       </div>
     </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Lịch gửi digest</label>
+        <select name="digest_schedule" class="form-select" id="digestSchedule" onchange="toggleDigestDay()">
+          <option value="off" <?= ($editing['digest_schedule'] ?? 'off') === 'off' ? 'selected' : '' ?>>Tắt</option>
+          <option value="daily" <?= ($editing['digest_schedule'] ?? '') === 'daily' ? 'selected' : '' ?>>Hàng ngày</option>
+          <option value="weekly" <?= ($editing['digest_schedule'] ?? '') === 'weekly' ? 'selected' : '' ?>>Hàng tuần</option>
+          <option value="monthly" <?= ($editing['digest_schedule'] ?? '') === 'monthly' ? 'selected' : '' ?>>Đầu tháng</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Giờ gửi</label>
+        <input type="time" name="digest_time" class="form-control" value="<?= h($editing['digest_time'] ?? '07:00') ?>">
+      </div>
+      <div class="form-group" id="digestDayGroup" style="display:none">
+        <label class="form-label" id="digestDayLabel">Ngày</label>
+        <select name="digest_day" class="form-select" id="digestDaySelect"></select>
+      </div>
+    </div>
+    <script>
+    function toggleDigestDay() {
+      const s = document.getElementById('digestSchedule').value;
+      const g = document.getElementById('digestDayGroup');
+      const sel = document.getElementById('digestDaySelect');
+      const lbl = document.getElementById('digestDayLabel');
+      const cur = <?= (int)($editing['digest_day'] ?? 0) ?>;
+      sel.innerHTML = '';
+      if (s === 'weekly') {
+        g.style.display = '';
+        lbl.textContent = 'Thứ';
+        ['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ nhật'].forEach((d,i) => {
+          const o = document.createElement('option'); o.value = i+1; o.textContent = d;
+          if (cur === i+1) o.selected = true;
+          sel.appendChild(o);
+        });
+      } else if (s === 'monthly') {
+        g.style.display = '';
+        lbl.textContent = 'Ngày trong tháng';
+        for (let i = 1; i <= 28; i++) {
+          const o = document.createElement('option'); o.value = i; o.textContent = 'Ngày ' + i;
+          if (cur === i) o.selected = true;
+          sel.appendChild(o);
+        }
+      } else {
+        g.style.display = 'none';
+      }
+    }
+    toggleDigestDay();
+    </script>
 
     <div class="form-group">
       <label class="form-label">Channel thành viên</label>
@@ -197,7 +249,7 @@ include __DIR__ . '/layout.php';
   <?php else: ?>
   <table class="table">
     <thead>
-      <tr><th>#</th><th>Tên nhóm</th><th>Thành viên</th><th>Gửi báo cáo</th><th></th></tr>
+      <tr><th>#</th><th>Tên nhóm</th><th>Thành viên</th><th>Gửi báo cáo</th><th>Lịch digest</th><th></th></tr>
     </thead>
     <tbody>
       <?php foreach ($groups as $g): ?>
@@ -215,6 +267,23 @@ include __DIR__ . '/layout.php';
           <?php else: ?>
             <span class="badge badge-warn">Chưa cấu hình chat</span>
           <?php endif; ?>
+        </td>
+        <td>
+          <?php
+            $ds = $g['digest_schedule'] ?? 'off';
+            $labels = ['off'=>'Tắt','daily'=>'Hàng ngày','weekly'=>'Hàng tuần','monthly'=>'Đầu tháng'];
+            $dayNames = [1=>'T2',2=>'T3',3=>'T4',4=>'T5',5=>'T6',6=>'T7',7=>'CN'];
+            if ($ds === 'off') {
+              echo '<span class="badge badge-muted">Tắt</span>';
+            } else {
+              $t = substr($g['digest_time'] ?? '07:00', 0, 5);
+              $extra = '';
+              if ($ds === 'weekly') $extra = ' (' . ($dayNames[$g['digest_day']] ?? '') . ')';
+              if ($ds === 'monthly') $extra = ' (ngày ' . ($g['digest_day'] ?? 1) . ')';
+              echo '<span class="badge badge-success">' . h($labels[$ds]) . $extra . '</span>';
+              echo '<div class="mono muted" style="font-size:12px;margin-top:2px">' . h($t) . '</div>';
+            }
+          ?>
         </td>
         <td class="text-right">
           <a href="?edit=<?= $g['id'] ?>" class="btn btn-sm">Sửa / Quản lý thành viên</a>

@@ -120,21 +120,28 @@ function sync_spend_for_date(PDO $db, string $date, callable $log): void {
 }
 
 function run_digest(PDO $db, string $today, string $yesterday, string $windowStart, string $windowEnd, callable $log): void {
-    $settings = $db->query('SELECT setting_key, setting_value FROM app_settings')->fetchAll(PDO::FETCH_KEY_PAIR);
-    $digestTime = $settings['digest_time'] ?? null;
-    if (!$digestTime) return;
-
-    $digestTimeSec = $digestTime . ':00';
-    if (!($digestTimeSec > $windowStart && $digestTimeSec <= $windowEnd)) return;
-
     $groups = $db->query('SELECT * FROM channel_groups')->fetchAll();
     if (empty($groups)) {
         $log("SKIP digest - chưa có nhóm channel nào");
         return;
     }
 
+    $dow = (int) date('N'); // 1=Mon..7=Sun
+    $dom = (int) date('j'); // 1..31
+
     foreach ($groups as $group) {
         $groupId = (int) $group['id'];
+        $schedule = $group['digest_schedule'] ?? 'off';
+        if ($schedule === 'off') continue;
+
+        // Check schedule match
+        if ($schedule === 'weekly' && $dow !== (int)($group['digest_day'] ?? 1)) continue;
+        if ($schedule === 'monthly' && $dom !== (int)($group['digest_day'] ?? 1)) continue;
+
+        // Check time window
+        $digestTime = substr($group['digest_time'] ?? '07:00:00', 0, 5);
+        $digestTimeSec = $digestTime . ':00';
+        if (!($digestTimeSec > $windowStart && $digestTimeSec <= $windowEnd)) continue;
 
         $chk = $db->prepare('SELECT 1 FROM digest_history WHERE group_id = ? AND send_date = ?');
         $chk->execute([$groupId, $today]);
@@ -149,8 +156,11 @@ function run_digest(PDO $db, string $today, string $yesterday, string $windowSta
             continue;
         }
 
+        // Cho monthly: báo cáo lũy kế tháng trước (ngày cuối tháng trước)
+        $reportDate = ($schedule === 'monthly') ? date('Y-m-t', strtotime('last month')) : $yesterday;
+
         try {
-            $msg = DigestBuilder::buildForGroup($db, $groupId, $yesterday);
+            $msg = DigestBuilder::buildForGroup($db, $groupId, $reportDate);
             if ($msg === null) {
                 $log("SKIP digest nhóm #{$groupId} - không có thành viên");
                 continue;

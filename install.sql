@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS channel_groups (
   name VARCHAR(150) NOT NULL,
   report_bot_id INT NULL,
   report_chat_id VARCHAR(50) NULL,
+  digest_schedule ENUM('daily','weekly','monthly','off') NOT NULL DEFAULT 'off',
+  digest_time TIME DEFAULT '07:00:00',
+  digest_day TINYINT DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_grp_bot FOREIGN KEY (report_bot_id) REFERENCES bots(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
