@@ -109,7 +109,6 @@ include __DIR__ . '/layout.php';
       </div>
     </div>
 
-    <h4 style="margin-top:20px;margin-bottom:12px;font-size:13px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);">Telegram</h4>
     <div class="form-group">
       <label class="form-label">Bot Token</label>
       <input type="text" name="token" class="form-control mono" required
