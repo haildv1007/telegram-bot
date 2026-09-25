@@ -28,6 +28,21 @@ $yesterday = (clone $now)->modify('-1 day')->format('Y-m-d');
 $windowStart = (clone $now)->modify('-5 minutes')->format('H:i:s');
 $windowEnd = $now->format('H:i:s');
 
+// ---------- Auto-update tỷ giá Binance (mỗi giờ) ----------
+$hasUsd = (int)$db->query("SELECT COUNT(*) FROM ads_credentials WHERE currency='USD' AND active=1")->fetchColumn();
+if ($hasUsd > 0) {
+    require_once __DIR__ . '/lib/CurrencyHelper.php';
+    $rateInfo = CurrencyHelper::getSettings($db);
+    $lastUpdate = $rateInfo['updated_at'] ? strtotime($rateInfo['updated_at']) : 0;
+    if (time() - $lastUpdate > 3600) {
+        $newRate = CurrencyHelper::fetchBinanceRate();
+        if ($newRate) {
+            CurrencyHelper::saveRate($db, $newRate);
+            $log("Updated Binance USDT/VND rate: $newRate");
+        }
+    }
+}
+
 // ---------- Sync spend hôm nay + hôm qua (đảm bảo data đủ cho báo cáo 7h sáng) ----------
 sync_spend_for_date($db, $today, $log);
 sync_spend_for_date($db, $yesterday, $log);

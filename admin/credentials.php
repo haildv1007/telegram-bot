@@ -230,9 +230,24 @@ document.getElementById('platformSel')?.addEventListener('change', e => {
         <div class="mono" style="padding:8px 0;font-size:16px;font-weight:600">1 USD = <?= number_format($usdtRate * $multiplier, 0, ',', '.') ?>đ</div>
       </div>
     </div>
-    <button type="submit" class="btn btn-primary btn-sm">Lưu tỷ giá</button>
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary btn-sm">Lưu tỷ giá</button>
+      <button type="button" class="btn btn-sm" onclick="fetchBinance()">🔄 Lấy giá Binance</button>
+    </div>
   </form>
 </div>
+<script>
+async function fetchBinance() {
+  const r = await fetch('api/fetch_binance_rate.php', {credentials:'same-origin'});
+  const d = await r.json();
+  if (d.ok) {
+    document.querySelector('input[name="usdt_rate"]').value = d.rate;
+    alert('Tỷ giá Binance: ' + d.rate.toLocaleString() + ' VND/USDT');
+  } else {
+    alert('Lỗi: ' + d.error);
+  }
+}
+</script>
 <?php endif; ?>
 
 <div class="card">

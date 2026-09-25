@@ -13,34 +13,11 @@ class CurrencyHelper {
     }
 
     public static function fetchBinanceRate(): ?float {
-        $ch = curl_init('https://api.binance.com/api/v3/ticker/price?symbol=USDTBRL');
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10]);
-        curl_close($ch);
-
-        $ch = curl_init('https://api.binance.com/api/v3/ticker/price?symbol=USDTDAI');
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10]);
-        curl_close($ch);
-
-        $url = 'https://www.binance.com/bapi/asset/v1/public/asset-service/product/currency';
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10]);
-        $resp = curl_exec($ch);
-        curl_close($ch);
-        $data = json_decode($resp, true);
-        if (!empty($data['data'])) {
-            foreach ($data['data'] as $item) {
-                if (($item['pair'] ?? '') === 'USDT_VND' || ($item['pair'] ?? '') === 'VND') {
-                    return (float)$item['rate'];
-                }
-            }
-        }
-
-        // Fallback: dùng P2P ads API
-        $p2p = 'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search';
-        $ch = curl_init($p2p);
+        // Binance P2P: lấy top 5 giá BUY USDT bằng VND, trung bình
+        $ch = curl_init('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 10,
+            CURLOPT_TIMEOUT => 15,
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
             CURLOPT_POSTFIELDS => json_encode([
@@ -48,7 +25,7 @@ class CurrencyHelper {
                 'fiat' => 'VND',
                 'tradeType' => 'BUY',
                 'page' => 1,
-                'rows' => 5,
+                'rows' => 10,
                 'payTypes' => [],
             ]),
         ]);
@@ -57,7 +34,19 @@ class CurrencyHelper {
         $data = json_decode($resp, true);
         if (!empty($data['data'])) {
             $prices = array_map(fn($ad) => (float)$ad['adv']['price'], $data['data']);
-            return $prices ? array_sum($prices) / count($prices) : null;
+            if ($prices) return round(array_sum($prices) / count($prices));
+        }
+
+        // Fallback: Binance convert API
+        $ch = curl_init('https://www.binance.com/bapi/asset/v1/public/asset-service/product/currency');
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10]);
+        $resp = curl_exec($ch);
+        curl_close($ch);
+        $data = json_decode($resp, true);
+        if (!empty($data['data'])) {
+            foreach ($data['data'] as $item) {
+                if (($item['pair'] ?? '') === 'USDT_VND') return (float)$item['rate'];
+            }
         }
         return null;
     }
