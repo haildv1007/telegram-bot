@@ -184,4 +184,112 @@ include __DIR__ . '/layout.php';
 
 <?php endif; ?>
 
+<!-- Webhook Management -->
+<div class="card mt-4">
+  <div class="card-header">
+    <h3>Webhook Management</h3>
+  </div>
+  <div style="padding:16px">
+    <div class="form-group">
+      <label class="form-label">Base URL (domain gốc, không trailing slash)</label>
+      <input type="text" id="wh-base-url" class="form-control mono" placeholder="https://yourdomain.com/telegram-bot" style="max-width:500px">
+      <div class="form-help">VD: <code>https://yourdomain.com/telegram-bot</code> hoặc <code>https://xxx.ngrok-free.app</code></div>
+    </div>
+
+    <table class="table mt-3">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Bot</th>
+          <th>Webhook URL</th>
+          <th>Trạng thái</th>
+          <th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($bots as $b): ?>
+        <tr id="wh-row-<?= $b['id'] ?>">
+          <td class="mono text-dim">#<?= $b['id'] ?></td>
+          <td><strong><?= h($b['name']) ?></strong></td>
+          <td class="mono" style="font-size:12px;word-break:break-all" id="wh-url-<?= $b['id'] ?>">—</td>
+          <td id="wh-status-<?= $b['id'] ?>"><span class="badge badge-muted">Chưa kiểm tra</span></td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-sm" onclick="whAction(<?= $b['id'] ?>,'info')">Kiểm tra</button>
+            <button class="btn btn-sm btn-primary" onclick="whAction(<?= $b['id'] ?>,'set')">Set Webhook</button>
+            <button class="btn btn-sm btn-danger" onclick="whAction(<?= $b['id'] ?>,'delete')">Xóa Webhook</button>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+
+    <div id="wh-result" style="margin-top:12px;display:none">
+      <label class="form-label">Kết quả:</label>
+      <pre style="background:#1a1a2e;color:#16c784;padding:12px;border-radius:8px;font-size:12px;max-height:200px;overflow:auto" id="wh-result-text"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+function whAction(botId, action) {
+  const baseUrl = document.getElementById('wh-base-url').value.trim();
+  if (action === 'set' && !baseUrl) {
+    alert('Vui lòng nhập Base URL trước!');
+    return;
+  }
+
+  const form = new FormData();
+  form.append('bot_id', botId);
+  form.append('wh_action', action);
+  if (baseUrl) form.append('base_url', baseUrl);
+
+  const statusEl = document.getElementById('wh-status-' + botId);
+  const urlEl = document.getElementById('wh-url-' + botId);
+  statusEl.innerHTML = '<span class="badge badge-accent">Đang xử lý...</span>';
+
+  fetch('api/webhook.php', {method: 'POST', body: form})
+    .then(r => r.json())
+    .then(data => {
+      const resultBox = document.getElementById('wh-result');
+      const resultText = document.getElementById('wh-result-text');
+      resultBox.style.display = 'block';
+      resultText.textContent = JSON.stringify(data, null, 2);
+
+      if (action === 'info') {
+        const info = data.result || {};
+        if (info.url) {
+          urlEl.textContent = info.url;
+          const pending = info.pending_update_count || 0;
+          const lastErr = info.last_error_message || '';
+          if (lastErr) {
+            statusEl.innerHTML = '<span class="badge badge-danger">Lỗi: ' + lastErr + '</span>';
+          } else {
+            statusEl.innerHTML = '<span class="badge badge-success">OK (pending: ' + pending + ')</span>';
+          }
+        } else {
+          urlEl.textContent = '(chưa set)';
+          statusEl.innerHTML = '<span class="badge badge-muted">Chưa set webhook</span>';
+        }
+      } else if (action === 'set') {
+        if (data.ok) {
+          urlEl.textContent = data.webhook_url || '';
+          statusEl.innerHTML = '<span class="badge badge-success">Set thành công!</span>';
+        } else {
+          statusEl.innerHTML = '<span class="badge badge-danger">FAIL: ' + (data.description || data.msg || '') + '</span>';
+        }
+      } else if (action === 'delete') {
+        if (data.ok) {
+          urlEl.textContent = '(đã xóa)';
+          statusEl.innerHTML = '<span class="badge badge-muted">Đã xóa webhook</span>';
+        } else {
+          statusEl.innerHTML = '<span class="badge badge-danger">FAIL</span>';
+        }
+      }
+    })
+    .catch(err => {
+      statusEl.innerHTML = '<span class="badge badge-danger">Network error</span>';
+    });
+}
+</script>
+
 <?php include __DIR__ . '/layout_end.php'; ?>
