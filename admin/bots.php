@@ -111,15 +111,17 @@ include __DIR__ . '/layout.php';
 
     <div class="form-group">
       <label class="form-label">Bot Token</label>
-      <input type="text" name="token" class="form-control mono" required
+      <input type="password" name="token" class="form-control mono" required autocomplete="off"
              value="<?= h($editing['token'] ?? '') ?>" placeholder="123456:ABC-DEF...">
+      <label class="form-check mt-1" style="font-size:12px"><input type="checkbox" onchange="this.closest('.form-group').querySelector('input[name]').type=this.checked?'text':'password'"> Hiện token</label>
       <div class="form-help">Lấy từ @BotFather trên Telegram.</div>
     </div>
 
     <div class="form-group">
       <label class="form-label">Webhook Secret</label>
-      <input type="text" name="webhook_secret" class="form-control mono"
+      <input type="password" name="webhook_secret" class="form-control mono" autocomplete="off"
              value="<?= h($editing['webhook_secret'] ?? '') ?>" placeholder="chuỗi bí mật tự đặt">
+      <label class="form-check mt-1" style="font-size:12px"><input type="checkbox" onchange="this.closest('.form-group').querySelector('input[name]').type=this.checked?'text':'password'"> Hiện</label>
       <div class="form-help">Dùng khi setwebhook, tránh call giả mạo. Tự đặt chuỗi bất kỳ, hệ thống sẽ dùng khi set webhook.</div>
     </div>
 
@@ -158,7 +160,7 @@ include __DIR__ . '/layout.php';
       <tr>
         <td class="mono text-dim">#<?= $b['id'] ?></td>
         <td><strong><?= h($b['name']) ?></strong></td>
-        <td class="mono"><?= h(substr($b['token'], 0, 10) . '…' . substr($b['token'], -6)) ?></td>
+        <td class="mono"><?= h(substr($b['token'], 0, 6) . '••••••' . substr($b['token'], -4)) ?></td>
         <td>
           <?php $rolelabel = ['reader'=>'Reader','reporter'=>'Reporter','both'=>'Both'][$b['role']] ?? $b['role']; ?>
           <span class="badge badge-accent"><?= h($rolelabel) ?></span>
@@ -202,8 +204,9 @@ include __DIR__ . '/layout.php';
           <td class="mono text-dim">#<?= $b['id'] ?></td>
           <td><strong><?= h($b['name']) ?></strong></td>
           <td>
-            <input type="text" class="form-control mono" id="gemini-key-<?= $b['id'] ?>" style="font-size:13px"
+            <input type="password" class="form-control mono" id="gemini-key-<?= $b['id'] ?>" style="font-size:13px" autocomplete="off"
                    value="<?= h($b['gemini_api_key'] ?? '') ?>" placeholder="Để trống = dùng key mặc định">
+            <label style="font-size:12px;margin-top:4px;cursor:pointer"><input type="checkbox" onchange="document.getElementById('gemini-key-<?= $b['id'] ?>').type=this.checked?'text':'password'"> Hiện</label>
           </td>
           <td><button class="btn btn-sm btn-primary" onclick="saveGeminiKey(<?= $b['id'] ?>)">Lưu</button></td>
         </tr>
