@@ -102,7 +102,8 @@ if ($parsed['channel_id']) {
         $cleanText = preg_replace('/@\S+/', '', $text);
         $cleanText = trim($cleanText);
         if ($cleanText !== '') {
-            $chatbot = new ChatBot($db, GEMINI_API_KEY);
+            $geminiKey = !empty($bot['gemini_api_key']) ? $bot['gemini_api_key'] : GEMINI_API_KEY;
+            $chatbot = new ChatBot($db, $geminiKey);
             $reply = $chatbot->answer($cleanText);
             $chunks = mb_str_split($reply, 4000);
             foreach ($chunks as $i => $chunk) {

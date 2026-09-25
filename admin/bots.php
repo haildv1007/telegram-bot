@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'name' => trim($_POST['name'] ?? ''),
             'token' => trim($_POST['token'] ?? ''),
             'webhook_secret' => trim($_POST['webhook_secret'] ?? ''),
+            'gemini_api_key' => trim($_POST['gemini_api_key'] ?? '') ?: null,
             'role' => $_POST['role'] ?? 'reader',
             'is_default_reporter' => isset($_POST['is_default_reporter']) ? 1 : 0,
             'active' => isset($_POST['active']) ? 1 : 0,
@@ -27,12 +28,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->exec('UPDATE bots SET is_default_reporter = 0');
             }
             if ($id > 0) {
-                $stmt = $db->prepare('UPDATE bots SET name=?, token=?, webhook_secret=?, role=?, is_default_reporter=?, active=? WHERE id=?');
-                $stmt->execute([$data['name'], $data['token'], $data['webhook_secret'], $data['role'], $data['is_default_reporter'], $data['active'], $id]);
+                $stmt = $db->prepare('UPDATE bots SET name=?, token=?, webhook_secret=?, gemini_api_key=?, role=?, is_default_reporter=?, active=? WHERE id=?');
+                $stmt->execute([$data['name'], $data['token'], $data['webhook_secret'], $data['gemini_api_key'], $data['role'], $data['is_default_reporter'], $data['active'], $id]);
                 flash('success', "Đã cập nhật bot #$id");
             } else {
-                $stmt = $db->prepare('INSERT INTO bots (name, token, webhook_secret, role, is_default_reporter, active) VALUES (?, ?, ?, ?, ?, ?)');
-                $stmt->execute([$data['name'], $data['token'], $data['webhook_secret'], $data['role'], $data['is_default_reporter'], $data['active']]);
+                $stmt = $db->prepare('INSERT INTO bots (name, token, webhook_secret, gemini_api_key, role, is_default_reporter, active) VALUES (?, ?, ?, ?, ?, ?, ?)');
+                $stmt->execute([$data['name'], $data['token'], $data['webhook_secret'], $data['gemini_api_key'], $data['role'], $data['is_default_reporter'], $data['active']]);
                 flash('success', 'Đã tạo bot mới');
             }
         } catch (Exception $e) {
@@ -120,6 +121,13 @@ include __DIR__ . '/layout.php';
       <input type="text" name="webhook_secret" class="form-control mono"
              value="<?= h($editing['webhook_secret'] ?? '') ?>" placeholder="chuỗi bí mật tự đặt">
       <div class="form-help">Dùng khi setwebhook, tránh call giả mạo.</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Gemini API Key</label>
+      <input type="text" name="gemini_api_key" class="form-control mono"
+             value="<?= h($editing['gemini_api_key'] ?? '') ?>" placeholder="AIzaSy... (để trống = dùng key mặc định trong config)">
+      <div class="form-help">Key riêng cho bot này. Để trống sẽ dùng GEMINI_API_KEY trong config.php.</div>
     </div>
 
     <div class="form-check">
