@@ -124,13 +124,15 @@ include __DIR__ . '/layout.php';
       <div class="form-help">Dùng khi setwebhook, tránh call giả mạo. Tự đặt chuỗi bất kỳ, hệ thống sẽ dùng khi set webhook.</div>
     </div>
 
+    <?php if ($editing): ?>
     <h4 style="margin-top:24px;margin-bottom:12px;font-size:13px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);">AI Chatbot (Thư Ký Kim)</h4>
     <div class="form-group">
       <label class="form-label">Gemini API Key</label>
       <input type="text" name="gemini_api_key" class="form-control mono"
              value="<?= h($editing['gemini_api_key'] ?? '') ?>" placeholder="AIzaSy... (để trống = dùng key mặc định trong config)">
-      <div class="form-help">Key riêng cho bot này. Để trống sẽ dùng GEMINI_API_KEY trong config.php. Chỉ cần nếu bot này dùng tính năng chatbot AI.</div>
+      <div class="form-help">Key riêng cho bot này. Để trống sẽ dùng GEMINI_API_KEY trong config.php.</div>
     </div>
+    <?php endif; ?>
 
     <div class="form-check">
       <input type="checkbox" name="is_default_reporter" id="def" <?= !empty($editing['is_default_reporter']) ? 'checked' : '' ?>>
