@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'save') {
         $id = (int)($_POST['id'] ?? 0);
         $data = [
-            'channel_id' => ((int)($_POST['channel_id'] ?? 0)) ?: null,
+            'channel_id' => $editing ? $editing['channel_id'] : null,
             'priority' => (int)($_POST['priority'] ?? 100),
             'match_type' => $_POST['match_type'] ?? 'contains',
             'match_field' => $_POST['match_field'] ?? 'full_text',
@@ -62,7 +62,6 @@ if (isset($_GET['edit'])) {
 $isNew = isset($_GET['new']);
 $showForm = $editing || $isNew;
 
-$channels = $db->query('SELECT id, name FROM ad_channels ORDER BY id')->fetchAll();
 $rules = $db->query('
   SELECT r.*, c.name AS channel_name
   FROM lead_rules r
@@ -96,22 +95,10 @@ include __DIR__ . '/layout.php';
       <input type="hidden" name="action" value="save">
       <input type="hidden" name="id" value="<?= $editing['id'] ?? 0 ?>">
 
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Channel (tùy chọn)</label>
-          <select name="channel_id" class="form-select">
-            <option value="">— Chưa gắn channel —</option>
-            <?php foreach ($channels as $c): ?>
-              <option value="<?= $c['id'] ?>" <?= ($editing['channel_id'] ?? '') == $c['id'] ? 'selected' : '' ?>>#<?= $c['id'] ?> · <?= h($c['name']) ?></option>
-            <?php endforeach; ?>
-          </select>
-          <div class="form-help">Để trống — sau đó gắn rule vào channel ở trang Channels báo cáo.</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Ưu tiên</label>
-          <input type="number" name="priority" class="form-control" value="<?= $editing['priority'] ?? 100 ?>">
-          <div class="form-help">Số cao hơn = ưu tiên hơn.</div>
-        </div>
+      <div class="form-group">
+        <label class="form-label">Ưu tiên</label>
+        <input type="number" name="priority" class="form-control" value="<?= $editing['priority'] ?? 100 ?>" style="max-width:200px">
+        <div class="form-help">Số cao hơn = ưu tiên hơn. Gắn rule vào channel ở trang Channels báo cáo.</div>
       </div>
 
       <div class="form-row">
