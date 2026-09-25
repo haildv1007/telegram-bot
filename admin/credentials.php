@@ -122,7 +122,8 @@ include __DIR__ . '/layout.php';
       </div>
       <div class="form-group">
         <label class="form-label">Developer Token (Google Ads)</label>
-        <input type="text" name="developer_token" class="form-control mono" value="<?= h($editing['developer_token'] ?? '') ?>">
+        <input type="password" name="developer_token" class="form-control mono" autocomplete="off" value="<?= h($editing['developer_token'] ?? '') ?>">
+        <label style="font-size:12px;margin-top:4px;cursor:pointer"><input type="checkbox" onchange="this.closest('.form-group').querySelector('input[name]').type=this.checked?'text':'password'"> Hiện</label>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -131,14 +132,16 @@ include __DIR__ . '/layout.php';
         </div>
         <div class="form-group">
           <label class="form-label">OAuth Client Secret</label>
-          <input type="text" name="client_secret" class="form-control mono" value="<?= h($editing['client_secret'] ?? '') ?>">
+          <input type="password" name="client_secret" class="form-control mono" autocomplete="off" value="<?= h($editing['client_secret'] ?? '') ?>">
+          <label style="font-size:12px;margin-top:4px;cursor:pointer"><input type="checkbox" onchange="this.closest('.form-group').querySelector('input[name]').type=this.checked?'text':'password'"> Hiện</label>
         </div>
       </div>
     </div>
 
     <div class="form-group">
       <label class="form-label" id="tokenLbl"><?= $platform==='facebook' ? 'System User Access Token' : 'Refresh Token' ?></label>
-      <textarea name="refresh_token" class="form-control mono"><?= h($editing['refresh_token'] ?? '') ?></textarea>
+      <textarea name="refresh_token" class="form-control mono" style="-webkit-text-security:disc"><?= h($editing['refresh_token'] ?? '') ?></textarea>
+      <label style="font-size:12px;margin-top:4px;cursor:pointer"><input type="checkbox" onchange="var t=this.closest('.form-group').querySelector('textarea');t.style.webkitTextSecurity=this.checked?'none':'disc'"> Hiện</label>
       <div class="form-help" id="tokenHelp">
         <?php if ($platform==='facebook'): ?>
           Long-lived token của System User (scope ads_read + business_management).
