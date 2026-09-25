@@ -86,18 +86,7 @@ if ($parsed['channel_id']) {
     $log("Unmatched lead saved from chat $chatId");
 } else {
     // Thư Ký Kim — AI chatbot
-    $chatType = $message['chat']['type'] ?? 'private';
-    $isPrivate = ($chatType === 'private');
-
-    // Cho phép chatbot trong nhóm báo cáo (report_chat_id khớp) hoặc private chat
-    $isReportGroup = false;
-    if (!$isPrivate) {
-        $rgQ = $db->prepare('SELECT COUNT(*) FROM channel_groups WHERE report_chat_id = ?');
-        $rgQ->execute([$chatId]);
-        $isReportGroup = (int)$rgQ->fetchColumn() > 0;
-    }
-
-    if ($isPrivate || $isReportGroup) {
+    {
         $log("ChatBot query from $chatId: " . substr($text, 0, 200));
         $cleanText = preg_replace('/@\S+/', '', $text);
         $cleanText = trim($cleanText);
