@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'save') {
         $id = (int)($_POST['id'] ?? 0);
         $data = [
-            'channel_id' => (int)($_POST['channel_id'] ?? 0),
+            'channel_id' => ((int)($_POST['channel_id'] ?? 0)) ?: null,
             'priority' => (int)($_POST['priority'] ?? 100),
             'match_type' => $_POST['match_type'] ?? 'contains',
             'match_field' => $_POST['match_field'] ?? 'full_text',
@@ -98,13 +98,14 @@ include __DIR__ . '/layout.php';
 
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Channel</label>
-          <select name="channel_id" class="form-select" required>
-            <option value="">— Chọn —</option>
+          <label class="form-label">Channel (tùy chọn)</label>
+          <select name="channel_id" class="form-select">
+            <option value="">— Chưa gắn channel —</option>
             <?php foreach ($channels as $c): ?>
               <option value="<?= $c['id'] ?>" <?= ($editing['channel_id'] ?? '') == $c['id'] ? 'selected' : '' ?>>#<?= $c['id'] ?> · <?= h($c['name']) ?></option>
             <?php endforeach; ?>
           </select>
+          <div class="form-help">Để trống — sau đó gắn rule vào channel ở trang Channels báo cáo.</div>
         </div>
         <div class="form-group">
           <label class="form-label">Ưu tiên</label>
@@ -222,7 +223,7 @@ function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;'
       <?php foreach ($rules as $r): ?>
       <tr>
         <td class="mono text-dim">#<?= $r['id'] ?></td>
-        <td><?= h($r['channel_name']) ?></td>
+        <td><?= $r['channel_name'] ? h($r['channel_name']) : '<span class="text-dim">Chưa gắn</span>' ?></td>
         <td>
           <span class="badge <?= $r['match_type']==='regex'?'badge-warn':'badge-muted' ?>"><?= h($r['match_type']) ?></span>
           <span class="text-muted"><?= h($r['match_field']) ?></span>

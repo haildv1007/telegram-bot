@@ -65,18 +65,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ins->execute([$chId, $t . ':00', $types[$i] ?? 'summary']);
             }
 
-            // Rules: replace all
-            $db->prepare('DELETE FROM lead_rules WHERE channel_id=?')->execute([$chId]);
-            $rPatterns = $_POST['rule_pattern'] ?? [];
-            $rTypes = $_POST['rule_type'] ?? [];
-            $rPrios = $_POST['rule_priority'] ?? [];
-            $insR = $db->prepare('INSERT INTO lead_rules (channel_id, priority, match_type, match_field, pattern, active) VALUES (?, ?, ?, "full_text", ?, 1)');
-            foreach ($rPatterns as $i => $p) {
-                $p = trim($p);
-                if ($p === '') continue;
-                $mt = in_array($rTypes[$i] ?? 'contains', ['contains','regex']) ? $rTypes[$i] : 'contains';
-                $pri = (int)($rPrios[$i] ?? 100);
-                $insR->execute([$chId, $pri, $mt, $p]);
+            // Rules: unlink old, link selected
+            $db->prepare('UPDATE lead_rules SET channel_id = NULL WHERE channel_id = ?')->execute([$chId]);
+            $ruleIds = array_map('intval', $_POST['rule_ids'] ?? []);
+            if ($ruleIds) {
+                $ph = implode(',', array_fill(0, count($ruleIds), '?'));
+                $db->prepare("UPDATE lead_rules SET channel_id = ? WHERE id IN ($ph)")->execute(array_merge([$chId], $ruleIds));
             }
 
             $db->commit();
@@ -401,41 +395,32 @@ include __DIR__ . '/layout.php';
     renderChips();
     </script>
 
+    <?php
+    $allRules = $db->query('SELECT id, pattern, match_type, channel_id FROM lead_rules WHERE active = 1 ORDER BY id')->fetchAll();
+    $editingRuleIds = array_column($editingRules, 'id');
+    ?>
     <h4 style="margin-top:24px;margin-bottom:12px;font-size:13px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);">Rule parse lead</h4>
-    <div class="form-help" style="margin-bottom:10px">Nếu tin chứa pattern → lead được gán vào channel này. Không rule = channel không nhận lead nào (chỉ dùng cho báo cáo spend Ads-only).</div>
-    <div id="rules">
-      <?php if (empty($editingRules)) { $editingRules = []; } ?>
-      <?php foreach ($editingRules as $rl): ?>
-      <div class="d-flex gap-2 mb-2 rule-row">
-        <select name="rule_type[]" class="form-select" style="max-width:140px">
-          <option value="contains" <?= $rl['match_type']==='contains'?'selected':'' ?>>Contains</option>
-          <option value="regex" <?= $rl['match_type']==='regex'?'selected':'' ?>>Regex</option>
-        </select>
-        <input type="text" name="rule_pattern[]" class="form-control mono" value="<?= h($rl['pattern']) ?>" placeholder="VD: xanhsm.io.vn" style="flex:1">
-        <input type="number" name="rule_priority[]" class="form-control" value="<?= (int)$rl['priority'] ?>" style="max-width:90px" title="Ưu tiên">
-        <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">Xóa</button>
-      </div>
-      <?php endforeach; ?>
+    <div class="form-help" style="margin-bottom:10px">Chọn rule đã tạo sẵn để gắn vào channel này. <a href="rules.php?new=1">Tạo rule mới</a>.</div>
+    <div style="background:var(--bg);border:1px solid var(--border-strong);border-radius:4px;padding:10px;max-height:220px;overflow-y:auto">
+      <?php if (empty($allRules)): ?>
+        <div class="text-muted">Chưa có rule nào. <a href="rules.php?new=1">Tạo rule đầu tiên</a>.</div>
+      <?php else: foreach ($allRules as $rl):
+        $taken = $rl['channel_id'] && !in_array((int)$rl['id'], $editingRuleIds) && (int)$rl['channel_id'] !== (int)($editing['id'] ?? 0);
+      ?>
+        <label class="form-check" style="padding:5px 0">
+          <input type="checkbox" name="rule_ids[]" value="<?= $rl['id'] ?>"
+                 <?= in_array((int)$rl['id'], $editingRuleIds) ? 'checked' : '' ?>
+                 <?= $taken ? 'disabled' : '' ?>>
+          <span>
+            <span class="badge <?= $rl['match_type']==='regex'?'badge-warn':'badge-muted' ?>"><?= h($rl['match_type']) ?></span>
+            <span class="mono"><?= h($rl['pattern']) ?></span>
+            <?php if ($taken): ?>
+              <span class="text-muted" style="font-size:11px">(đã gắn channel khác)</span>
+            <?php endif; ?>
+          </span>
+        </label>
+      <?php endforeach; endif; ?>
     </div>
-    <button type="button" class="btn btn-sm" onclick="addRule()">+ Thêm rule</button>
-
-    <script>
-    function addRule() {
-      const wrap = document.getElementById('rules');
-      const row = document.createElement('div');
-      row.className = 'd-flex gap-2 mb-2 rule-row';
-      row.innerHTML = `
-        <select name="rule_type[]" class="form-select" style="max-width:140px">
-          <option value="contains">Contains</option>
-          <option value="regex">Regex</option>
-        </select>
-        <input type="text" name="rule_pattern[]" class="form-control mono" placeholder="VD: xanhsm.io.vn" style="flex:1">
-        <input type="number" name="rule_priority[]" class="form-control" value="100" style="max-width:90px" title="Ưu tiên">
-        <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">Xóa</button>
-      `;
-      wrap.appendChild(row);
-    }
-    </script>
 
     <h4 style="margin-top:24px;margin-bottom:12px;font-size:13px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);">Lịch báo cáo</h4>
     <div id="scheds">

@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS channel_schedules (
 -- 7. lead_rules
 CREATE TABLE IF NOT EXISTS lead_rules (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  channel_id INT NOT NULL,
+  channel_id INT NULL,
   priority INT NOT NULL DEFAULT 100,
   match_type ENUM('contains','regex') NOT NULL DEFAULT 'contains',
   match_field ENUM('full_text','source','utm') NOT NULL DEFAULT 'full_text',
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS lead_rules (
   active TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   KEY idx_channel_prio (channel_id, priority),
-  CONSTRAINT fk_rule_ch FOREIGN KEY (channel_id) REFERENCES ad_channels(id) ON DELETE CASCADE
+  CONSTRAINT fk_rule_ch FOREIGN KEY (channel_id) REFERENCES ad_channels(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 8. leads
