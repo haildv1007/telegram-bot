@@ -109,6 +109,7 @@ include __DIR__ . '/layout.php';
       </div>
     </div>
 
+    <h4 style="margin-top:20px;margin-bottom:12px;font-size:13px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);">Telegram</h4>
     <div class="form-group">
       <label class="form-label">Bot Token</label>
       <input type="text" name="token" class="form-control mono" required
@@ -120,14 +121,15 @@ include __DIR__ . '/layout.php';
       <label class="form-label">Webhook Secret</label>
       <input type="text" name="webhook_secret" class="form-control mono"
              value="<?= h($editing['webhook_secret'] ?? '') ?>" placeholder="chuỗi bí mật tự đặt">
-      <div class="form-help">Dùng khi setwebhook, tránh call giả mạo.</div>
+      <div class="form-help">Dùng khi setwebhook, tránh call giả mạo. Tự đặt chuỗi bất kỳ, hệ thống sẽ dùng khi set webhook.</div>
     </div>
 
+    <h4 style="margin-top:24px;margin-bottom:12px;font-size:13px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);">AI Chatbot (Thư Ký Kim)</h4>
     <div class="form-group">
       <label class="form-label">Gemini API Key</label>
       <input type="text" name="gemini_api_key" class="form-control mono"
              value="<?= h($editing['gemini_api_key'] ?? '') ?>" placeholder="AIzaSy... (để trống = dùng key mặc định trong config)">
-      <div class="form-help">Key riêng cho bot này. Để trống sẽ dùng GEMINI_API_KEY trong config.php.</div>
+      <div class="form-help">Key riêng cho bot này. Để trống sẽ dùng GEMINI_API_KEY trong config.php. Chỉ cần nếu bot này dùng tính năng chatbot AI.</div>
     </div>
 
     <div class="form-check">
