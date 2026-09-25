@@ -14,6 +14,17 @@ $db = get_db();
 $startDt = $startDate . ' 00:00:00';
 $endDt = $endDate . ' 23:59:59';
 
+// Currency conversion map
+require_once __DIR__ . '/../../lib/CurrencyHelper.php';
+$exRate = CurrencyHelper::getRate($db);
+$currencyMap = [];
+foreach ($db->query('SELECT id, currency FROM ads_credentials')->fetchAll() as $_cr) {
+    $currencyMap[(int)$_cr['id']] = $_cr['currency'] ?? 'VND';
+}
+function convertSpend(float $spend, int $credId, float $rate, array $map): float {
+    return ($map[$credId] ?? 'VND') === 'USD' ? $spend * $rate : $spend;
+}
+
 // ---------- Stats tổng (leads + spend trong khoảng đã chọn) ----------
 $leadKeys = $db->prepare("SELECT dup_key FROM leads WHERE created_at BETWEEN ? AND ?");
 $leadKeys->execute([$startDt, $endDt]);
@@ -21,16 +32,19 @@ $leadKeys = $leadKeys->fetchAll(PDO::FETCH_COLUMN);
 $leadsTotal = count($leadKeys);
 $leadsUnique = count(array_unique($leadKeys));
 
-$spendStmt = $db->prepare("SELECT COALESCE(SUM(spend),0) FROM ads_spend_cache WHERE spend_date BETWEEN ? AND ?");
-$spendStmt->execute([$startDate, $endDate]);
-$spendTotal = (float) $spendStmt->fetchColumn();
+$spendRows = $db->prepare("SELECT credential_id, SUM(spend) AS s FROM ads_spend_cache WHERE spend_date BETWEEN ? AND ? GROUP BY credential_id");
+$spendRows->execute([$startDate, $endDate]);
+$spendTotal = 0.0;
+foreach ($spendRows as $_r) $spendTotal += convertSpend((float)$_r['s'], (int)$_r['credential_id'], $exRate, $currencyMap);
 
 $cpl = $leadsUnique > 0 ? round($spendTotal / $leadsUnique) : 0;
 
 // Reference: tháng này (luôn hiện kèm, không phụ thuộc filter)
 $monthStart = date('Y-m-01');
 $leadsMonth = (int) $db->query("SELECT COUNT(*) FROM leads WHERE created_at >= '$monthStart 00:00:00'")->fetchColumn();
-$spendMonth = (float) $db->query("SELECT COALESCE(SUM(spend),0) FROM ads_spend_cache WHERE spend_date >= '$monthStart'")->fetchColumn();
+$spendMonthRows = $db->query("SELECT credential_id, SUM(spend) AS s FROM ads_spend_cache WHERE spend_date >= '$monthStart' GROUP BY credential_id")->fetchAll();
+$spendMonth = 0.0;
+foreach ($spendMonthRows as $_r) $spendMonth += convertSpend((float)$_r['s'], (int)$_r['credential_id'], $exRate, $currencyMap);
 
 $channelsActive = (int) $db->query("SELECT COUNT(*) FROM ad_channels WHERE active=1")->fetchColumn();
 $unmatchedOpen = (int) $db->query("SELECT COUNT(*) FROM unmatched_leads WHERE resolved=0")->fetchColumn();
@@ -56,7 +70,7 @@ foreach ($topCampaigns as &$tc) {
     $ld = $lp->fetch();
     $tc['leads'] = (int) $ld['t'];
     $tc['leads_unique'] = (int) $ld['u'];
-    $tc['spend'] = (float) $tc['spend'];
+    $tc['spend'] = convertSpend((float)$tc['spend'], (int)$tc['credential_id'], $exRate, $currencyMap);
     $tc['impressions'] = (int) $tc['impressions'];
     $tc['clicks'] = (int) $tc['clicks'];
     $tc['conversions'] = (int) $tc['conversions'];
@@ -83,6 +97,7 @@ function range_channel_stats(PDO $db, array $channel, string $startDt, string $e
 
     $spend = 0.0;
     if (!empty($credIds)) {
+        global $exRate, $currencyMap;
         $ph = implode(',', array_fill(0, count($credIds), '?'));
         $params = array_merge($credIds, [$startDate, $endDate]);
         $extra = '';
@@ -94,9 +109,9 @@ function range_channel_stats(PDO $db, array $channel, string $startDt, string $e
                 $params = array_merge($params, $campIds);
             }
         }
-        $q = $db->prepare("SELECT COALESCE(SUM(spend),0) FROM ads_spend_cache WHERE credential_id IN ($ph) AND spend_date BETWEEN ? AND ?$extra");
+        $q = $db->prepare("SELECT credential_id, SUM(spend) AS s FROM ads_spend_cache WHERE credential_id IN ($ph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
         $q->execute($params);
-        $spend = (float) $q->fetchColumn();
+        foreach ($q as $_r) $spend += convertSpend((float)$_r['s'], (int)$_r['credential_id'], $exRate, $currencyMap);
     }
     if ($spend <= 0) {
         $bq = $db->prepare('SELECT COALESCE(SUM(budget),0) FROM ad_budget WHERE budget_date BETWEEN ? AND ? AND channel_id = ?');
@@ -141,9 +156,12 @@ $lq->execute([$startDt, $endDt]);
 foreach ($lq as $r) { $leadByDay[$r['d']] = ['t'=>(int)$r['t'],'u'=>(int)$r['u']]; }
 
 $spendByDay = [];
-$sq = $db->prepare("SELECT spend_date d, SUM(spend) s FROM ads_spend_cache WHERE spend_date BETWEEN ? AND ? GROUP BY spend_date");
+$sq = $db->prepare("SELECT spend_date d, credential_id, SUM(spend) s FROM ads_spend_cache WHERE spend_date BETWEEN ? AND ? GROUP BY spend_date, credential_id");
 $sq->execute([$startDate, $endDate]);
-foreach ($sq as $r) { $spendByDay[$r['d']] = (float)$r['s']; }
+foreach ($sq as $r) {
+    $converted = convertSpend((float)$r['s'], (int)$r['credential_id'], $exRate, $currencyMap);
+    $spendByDay[$r['d']] = ($spendByDay[$r['d']] ?? 0) + $converted;
+}
 
 $labels = []; $leadsTotalSeries = []; $spendSeries = [];
 foreach ($days as $d) {

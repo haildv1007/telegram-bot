@@ -12,6 +12,14 @@ $to = $_GET['to'] ?? null;
 if ($groupId <= 0) { echo json_encode(['ok'=>false, 'error'=>'Missing group_id']); exit; }
 
 $db = get_db();
+
+require_once __DIR__ . '/../../lib/CurrencyHelper.php';
+$exRate = CurrencyHelper::getRate($db);
+$currencyMap = [];
+foreach ($db->query('SELECT id, currency FROM ads_credentials')->fetchAll() as $_cr) {
+    $currencyMap[(int)$_cr['id']] = $_cr['currency'] ?? 'VND';
+}
+
 $g = $db->prepare('SELECT * FROM channel_groups WHERE id = ?');
 $g->execute([$groupId]);
 $group = $g->fetch();
@@ -46,7 +54,7 @@ function campaign_rows(PDO $db, array $channel, string $start, string $end): arr
         }
     }
     $q = $db->prepare("
-      SELECT s.campaign_id, COALESCE(c.name, s.campaign_id) AS name, cr.platform, cr.account_label,
+      SELECT s.credential_id AS cred_id, s.campaign_id, COALESCE(c.name, s.campaign_id) AS name, cr.platform, cr.account_label,
              SUM(s.spend) AS spend, SUM(s.impressions) AS impressions, SUM(s.clicks) AS clicks,
              SUM(s.conversions) AS conversions, SUM(s.reach) AS reach, AVG(s.frequency) AS frequency,
              MAX(s.result_label) AS result_label
@@ -54,14 +62,16 @@ function campaign_rows(PDO $db, array $channel, string $start, string $end): arr
       LEFT JOIN campaigns c ON c.credential_id = s.credential_id AND c.platform_campaign_id = s.campaign_id
       LEFT JOIN ads_credentials cr ON cr.id = s.credential_id
       WHERE s.credential_id IN ($ph) AND s.spend_date BETWEEN ? AND ?$extra
-      GROUP BY s.campaign_id, name, cr.platform, cr.account_label
+      GROUP BY s.credential_id, s.campaign_id, name, cr.platform, cr.account_label
       ORDER BY spend DESC
     ");
     $q->execute($params);
     $rows = $q->fetchAll();
 
+    global $exRate, $currencyMap;
     foreach ($rows as &$r) {
-        $r['spend'] = (float)$r['spend'];
+        $rawSpend = (float)$r['spend'];
+        $r['spend'] = ($currencyMap[(int)$r['cred_id']] ?? 'VND') === 'USD' ? $rawSpend * $exRate : $rawSpend;
         $r['impressions'] = (int)$r['impressions'];
         $r['clicks'] = (int)$r['clicks'];
         $r['conversions'] = (int)$r['conversions'];
@@ -143,9 +153,12 @@ if (!empty($memberIdsForStats)) {
                 $params = array_merge($params, $campIds);
             }
         }
-        $sq = $db->prepare("SELECT COALESCE(SUM(spend),0) FROM ads_spend_cache WHERE credential_id IN ($phC) AND spend_date BETWEEN ? AND ?$extra");
+        $sq = $db->prepare("SELECT credential_id, SUM(spend) AS s FROM ads_spend_cache WHERE credential_id IN ($phC) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
         $sq->execute($params);
-        $spendMonth += (float) $sq->fetchColumn();
+        foreach ($sq as $_r) {
+            $v = (float)$_r['s'];
+            $spendMonth += ($currencyMap[(int)$_r['credential_id']] ?? 'VND') === 'USD' ? $v * $exRate : $v;
+        }
     }
 }
 
@@ -193,9 +206,13 @@ if (!empty($memberIds)) {
                 $params = array_merge($params, $campIds);
             }
         }
-        $sq = $db->prepare("SELECT spend_date d, SUM(spend) s FROM ads_spend_cache WHERE credential_id IN ($phC) AND spend_date BETWEEN ? AND ?$extra GROUP BY spend_date");
+        $sq = $db->prepare("SELECT spend_date d, credential_id, SUM(spend) s FROM ads_spend_cache WHERE credential_id IN ($phC) AND spend_date BETWEEN ? AND ?$extra GROUP BY spend_date, credential_id");
         $sq->execute($params);
-        foreach ($sq as $r) { $spendByDay[$r['d']] = ($spendByDay[$r['d']] ?? 0) + (float)$r['s']; }
+        foreach ($sq as $r) {
+            $v = (float)$r['s'];
+            $converted = ($currencyMap[(int)$r['credential_id']] ?? 'VND') === 'USD' ? $v * $exRate : $v;
+            $spendByDay[$r['d']] = ($spendByDay[$r['d']] ?? 0) + $converted;
+        }
     }
 }
 
