@@ -246,18 +246,6 @@ class ReportBuilder {
         if ($isProgress) {
             $lines[] = "";
             $lines[] = "⏳ Số liệu tạm tính, spend có độ trễ 1-3h.";
-        } else {
-            // ---- Lũy kế tháng (gộp nhóm cha-con nếu có) ----
-            $mtd = self::monthToDate($db, $channel, $reportDate);
-            if ($mtd) {
-                $lines[] = "";
-                $lines[] = "📅 Lũy kế tháng " . date('m/Y', strtotime($reportDate))
-                         . ($mtd['groupLabel'] ? " (nhóm: {$mtd['groupLabel']})" : "")
-                         . " — từ 01 đến " . date('d/m', strtotime($reportDate));
-                $lines[] = "— Tổng lead: {$mtd['total']} (unique: {$mtd['unique']})";
-                $lines[] = "— Tổng ngân sách: " . number_format($mtd['spend'], 0, ',', '.') . "đ";
-                $lines[] = "— Chi phí/lead TB: " . number_format($mtd['cpl'], 0, ',', '.') . "đ";
-            }
         }
 
         return implode("\n", $lines);
