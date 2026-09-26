@@ -51,6 +51,11 @@ $lpName = trim($input['name'] ?? '');
 $lpPhone = trim($input['phone'] ?? '');
 $lpEmail = trim($input['email'] ?? '');
 $lpMessage = trim($input['message'] ?? '');
+$lpSource = trim($input['source'] ?? '');
+$lpIp = trim($input['ip'] ?? '');
+$lpArea = trim($input['area'] ?? '');
+$lpCccd = trim($input['cccd'] ?? '');
+$lpVehicle = trim($input['vehicle'] ?? '');
 
 // Validate secret
 if ($secret !== WEBHOOK_SECRET) {
@@ -65,7 +70,7 @@ $result = ['ok' => true, 'matched' => false];
 
 // Mode 1: LadiPage structured fields (name/phone present)
 if ($lpPhone !== '' || $lpName !== '') {
-    $log("API_LEAD: LadiPage fields - name=$lpName phone=$lpPhone email=$lpEmail");
+    $log("API_LEAD: LadiPage fields - name=$lpName phone=$lpPhone source=$lpSource");
 
     $phone = $lpPhone;
     $name = $lpName;
@@ -75,18 +80,26 @@ if ($lpPhone !== '' || $lpName !== '') {
         exit;
     }
 
-    $dupKey = normalize_key($phone) . '|';
+    $dupKey = normalize_key($phone) . '|' . normalize_key($lpCccd);
     $createdAt = date('Y-m-d H:i:s');
 
-    // Build raw text for storage
-    $rawParts = [];
-    if ($name !== '') $rawParts[] = "Tên: $name";
-    if ($phone !== '') $rawParts[] = "SĐT: $phone";
-    if ($lpEmail !== '') $rawParts[] = "Email: $lpEmail";
+    // Build raw text for storage (giống format Telegram để dễ debug)
+    $rawParts = ["Thông báo dữ liệu từ LadiPage"];
+    if ($name !== '') $rawParts[] = "name : $name";
+    if ($phone !== '') $rawParts[] = "phone : $phone";
+    if ($lpArea !== '') $rawParts[] = "Khu Vực : $lpArea";
+    if ($lpCccd !== '') $rawParts[] = "Số CCCD : $lpCccd";
+    if ($lpVehicle !== '') $rawParts[] = "Phương Tiện : $lpVehicle";
+    if ($lpEmail !== '') $rawParts[] = "Email : $lpEmail";
     if ($lpMessage !== '') $rawParts[] = $lpMessage;
+    if ($lpSource !== '') $rawParts[] = "Nguồn từ: $lpSource";
+    if ($lpIp !== '') $rawParts[] = "Địa chỉ IP: $lpIp";
     $rawText = implode("\n", $rawParts);
 
-    // Determine channel_id: from param, or try to match via rules
+    // Determine channel_id: from param → from source URL → from rules
+    if ($channelId <= 0 && $lpSource !== '') {
+        $channelId = detectChannelFromSource($db, $lpSource);
+    }
     if ($channelId <= 0) {
         $rules = LeadParser::loadRulesFor($db, $chatId ?: null);
         $parsed = LeadParser::parse($rawText, $rules);
@@ -100,7 +113,7 @@ if ($lpPhone !== '' || $lpName !== '') {
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ');
             $stmt->execute([
-                $channelId, '', $createdAt, $name, $phone, '', '', '', 'ladipage', '', $dupKey, $rawText,
+                $channelId, '', $createdAt, $name, $phone, $lpCccd, $lpArea, $lpVehicle, $lpSource ?: 'ladipage', $lpIp, $dupKey, $rawText,
             ]);
             $log("API_LEAD: saved LadiPage lead to channel $channelId dup_key=$dupKey");
             $result['matched'] = true;
@@ -217,6 +230,23 @@ function forwardToTelegram(PDO $db, int $botId, string $chatId, int $channelId, 
             $log("API_LEAD: forward FAILED to $targetChat: " . json_encode($resp));
         }
     }
+}
+
+function detectChannelFromSource(PDO $db, string $sourceUrl): int {
+    $host = parse_url($sourceUrl, PHP_URL_HOST);
+    if (!$host) return 0;
+    $host = preg_replace('/^www\./', '', strtolower($host));
+
+    // Lookup domain → channel mapping in DB
+    try {
+        $stmt = $db->prepare('SELECT channel_id FROM channel_domains WHERE domain = ? LIMIT 1');
+        $stmt->execute([$host]);
+        $id = $stmt->fetchColumn();
+        if ($id) return (int)$id;
+    } catch (Throwable $e) {
+        // Table may not exist yet — ignore
+    }
+    return 0;
 }
 
 function normalize_key(?string $s): string {
