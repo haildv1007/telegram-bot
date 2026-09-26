@@ -31,10 +31,21 @@ class ReportBuilder {
             $historyStart = date('Y-m-d 00:00:00', strtotime("-21 days", strtotime($dayStart)));
             $uniqKeys = array_values(array_unique($keys));
             $ph = implode(',', array_fill(0, count($uniqKeys), '?'));
+
+            // Check trùng cross-channel trong cùng nhóm
+            $groupId = $channel['group_id'] ?? null;
+            if ($groupId) {
+                $gq = $db->prepare('SELECT id FROM ad_channels WHERE group_id = ?');
+                $gq->execute([$groupId]);
+                $groupChIds = array_map('intval', $gq->fetchAll(PDO::FETCH_COLUMN));
+            } else {
+                $groupChIds = [(int)$channel['id']];
+            }
+            $phCh = implode(',', array_fill(0, count($groupChIds), '?'));
             $q = "SELECT COUNT(DISTINCT dup_key) FROM leads
-                  WHERE channel_id = ? AND created_at >= ? AND created_at < ? AND dup_key IN ($ph)";
+                  WHERE channel_id IN ($phCh) AND created_at >= ? AND created_at < ? AND dup_key IN ($ph)";
             $stmt = $db->prepare($q);
-            $stmt->execute(array_merge([$channel['id'], $historyStart, $dayStart], $uniqKeys));
+            $stmt->execute(array_merge($groupChIds, [$historyStart, $dayStart], $uniqKeys));
             $dupHistory = (int) $stmt->fetchColumn();
         }
         $newLeads = $unique - $dupHistory;
