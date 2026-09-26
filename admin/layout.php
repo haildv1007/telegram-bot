@@ -57,6 +57,10 @@ function nav_active($current, $key) {
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a6 6 0 0112 0v2"/></svg>
       Tài khoản Ads
     </a>
+    <a href="partners.php" class="<?= nav_active($page, 'partners') ?>">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+      Đối tác
+    </a>
 
     <div class="sidebar-nav-section">Vận hành</div>
     <a href="unmatched.php" class="<?= nav_active($page, 'unmatched') ?>">
