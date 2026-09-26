@@ -295,12 +295,27 @@ $groups = $groups->fetchAll();
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     .sidebar { display: none; }
-    .main { margin-left: 0; padding: 24px; }
-    .topbar { left: 0; }
-    .partner-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-    .partner-header h1 { font-size: 22px; }
+    .topbar { display: none; }
+    .main { margin-left: 0; padding: 16px; max-width: 1200px; margin: 0 auto; }
+    .partner-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .partner-header h1 { font-size: 18px; margin: 0; }
     .partner-header .logout-btn { color: var(--text-dim); text-decoration: none; font-size: 13px; }
     .partner-header .logout-btn:hover { color: var(--text); }
+    .stat-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+    .scope-tabs { flex-wrap: wrap; gap: 6px; }
+    .chart-filters { flex-wrap: wrap; gap: 6px; }
+    @media (max-width: 640px) {
+      .main { padding: 10px; }
+      .partner-header h1 { font-size: 15px; }
+      .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .stat-card { padding: 12px; }
+      .stat-card .value { font-size: 20px; }
+      .stat-card .label { font-size: 11px; }
+      .table { font-size: 12px; }
+      .table th, .table td { padding: 6px 8px; }
+      .card { margin-bottom: 12px; }
+      .scope-tab, .chart-filter-btn { font-size: 12px; padding: 6px 10px; }
+    }
   </style>
 </head>
 <body>
@@ -317,7 +332,7 @@ $groups = $groups->fetchAll();
   <div class="scope-tabs" id="scopeTabs">
     <button type="button" class="scope-tab active" data-scope="all" onclick="switchScope('all')">Tổng quan</button>
     <?php foreach ($groups as $g): ?>
-      <button type="button" class="scope-tab" data-scope="<?= $g['id'] ?>" onclick="switchScope('<?= $g['id'] ?>')">"<?= h($g['name']) ?>"</button>
+      <button type="button" class="scope-tab" data-scope="<?= $g['id'] ?>" onclick="switchScope('<?= $g['id'] ?>')"><?= h($g['name']) ?></button>
     <?php endforeach; ?>
   </div>
 
