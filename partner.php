@@ -254,11 +254,30 @@ if (isset($_GET['api'])) {
     $ldq->execute(array_merge($channelIds, [$startDt, $endDt]));
     foreach ($ldq as $r) $leadByDay[$r['d']] = (int)$r['t'];
 
+    $spendByDay = [];
+    if (!empty($credIdsAll)) {
+        $crPh2 = implode(',', array_fill(0, count($credIdsAll), '?'));
+        $crIds2 = array_keys($credIdsAll);
+        $spParams = array_merge($crIds2, [$startDate, $endDate]);
+        $campFilter = '';
+        if (!empty($assignedCamps)) {
+            $campKeys = array_keys($assignedCamps);
+            $campFilter = ' AND campaign_id IN (' . implode(',', array_fill(0, count($campKeys), '?')) . ')';
+            $spParams = array_merge($spParams, $campKeys);
+        }
+        $sdq = $db->prepare("SELECT spend_date, credential_id, SUM(spend) AS s FROM ads_spend_cache WHERE credential_id IN ($crPh2) AND spend_date BETWEEN ? AND ?$campFilter GROUP BY spend_date, credential_id");
+        $sdq->execute($spParams);
+        foreach ($sdq as $r) {
+            $converted = (($currencyMap[(int)$r['credential_id']] ?? 'VND') === 'USD') ? (float)$r['s'] * $exRate : (float)$r['s'];
+            $spendByDay[$r['spend_date']] = ($spendByDay[$r['spend_date']] ?? 0) + $converted;
+        }
+    }
+
     $labels = []; $leadsSeries = []; $spendSeries = [];
     foreach ($days as $d) {
         $labels[] = date('d/m', strtotime($d));
         $leadsSeries[] = $leadByDay[$d] ?? 0;
-        $spendSeries[] = 0;
+        $spendSeries[] = $spendByDay[$d] ?? 0;
     }
 
     // Groups info
