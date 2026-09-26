@@ -2,17 +2,23 @@
 /**
  * api_lead.php — API endpoint cho LadiPage / webhook bên ngoài POST lead trực tiếp.
  *
- * LadiPage POST raw text vào đây → parse lead → lưu DB → forward tin vào group Telegram.
- * Thay thế flow: LadiPage → bot gửi group → bot cào (bot không đọc được tin bot khác).
+ * Hỗ trợ 2 format:
+ * 1) LadiPage API: POST từng field riêng (name, phone, email, message, ...)
+ * 2) Raw text: POST text giống tin nhắn Telegram → dùng LeadParser
  *
  * POST /api_lead.php
  * Content-Type: application/json hoặc application/x-www-form-urlencoded
  *
  * Params:
- *   secret  (required) — khóa bảo mật
- *   text    (required) — nội dung lead (raw text giống tin nhắn Telegram)
- *   chat_id (optional) — chat_id group để forward tin vào (dùng source_chat_id của channel nếu không truyền)
- *   bot_id  (optional) — bot dùng để gửi tin vào group (default: bot có is_default_reporter)
+ *   secret     (required) — khóa bảo mật
+ *   channel_id (optional) — ID channel trong hệ thống (nếu biết)
+ *   text       (optional) — nội dung raw text (dùng LeadParser)
+ *   name       (optional) — tên khách hàng (LadiPage field)
+ *   phone      (optional) — SĐT (LadiPage field)
+ *   email      (optional) — email (LadiPage field)
+ *   message    (optional) — ghi chú (LadiPage field)
+ *   chat_id    (optional) — chat_id group để forward tin vào Telegram
+ *   bot_id     (optional) — bot dùng để gửi tin vào group
  */
 
 require_once __DIR__ . '/config.php';
@@ -38,6 +44,13 @@ $secret = $input['secret'] ?? $_GET['secret'] ?? '';
 $text = $input['text'] ?? '';
 $chatId = $input['chat_id'] ?? '';
 $botId = (int)($input['bot_id'] ?? 0);
+$channelId = (int)($input['channel_id'] ?? 0);
+
+// LadiPage fields
+$lpName = trim($input['name'] ?? '');
+$lpPhone = trim($input['phone'] ?? '');
+$lpEmail = trim($input['email'] ?? '');
+$lpMessage = trim($input['message'] ?? '');
 
 // Validate secret
 if ($secret !== WEBHOOK_SECRET) {
@@ -47,24 +60,83 @@ if ($secret !== WEBHOOK_SECRET) {
     exit;
 }
 
+$db = get_db();
+$result = ['ok' => true, 'matched' => false];
+
+// Mode 1: LadiPage structured fields (name/phone present)
+if ($lpPhone !== '' || $lpName !== '') {
+    $log("API_LEAD: LadiPage fields - name=$lpName phone=$lpPhone email=$lpEmail");
+
+    $phone = $lpPhone;
+    $name = $lpName;
+
+    if ($phone === '' && $name === '') {
+        echo json_encode(['ok' => true, 'matched' => false, 'reason' => 'No phone or name']);
+        exit;
+    }
+
+    $dupKey = normalize_key($phone) . '|';
+    $createdAt = date('Y-m-d H:i:s');
+
+    // Build raw text for storage
+    $rawParts = [];
+    if ($name !== '') $rawParts[] = "Tên: $name";
+    if ($phone !== '') $rawParts[] = "SĐT: $phone";
+    if ($lpEmail !== '') $rawParts[] = "Email: $lpEmail";
+    if ($lpMessage !== '') $rawParts[] = $lpMessage;
+    $rawText = implode("\n", $rawParts);
+
+    // Determine channel_id: from param, or try to match via rules
+    if ($channelId <= 0) {
+        $rules = LeadParser::loadRulesFor($db, $chatId ?: null);
+        $parsed = LeadParser::parse($rawText, $rules);
+        $channelId = $parsed['channel_id'] ?? 0;
+    }
+
+    if ($channelId > 0) {
+        try {
+            $stmt = $db->prepare('
+              INSERT INTO leads (channel_id, platform_campaign_id, created_at, name, phone, cccd, area, vehicle, source, ip, dup_key, raw_text)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ');
+            $stmt->execute([
+                $channelId, '', $createdAt, $name, $phone, '', '', '', 'ladipage', '', $dupKey, $rawText,
+            ]);
+            $log("API_LEAD: saved LadiPage lead to channel $channelId dup_key=$dupKey");
+            $result['matched'] = true;
+            $result['channel_id'] = $channelId;
+            $result['lead_id'] = (int)$db->lastInsertId();
+        } catch (Throwable $e) {
+            $log("API_LEAD: DB ERROR: " . $e->getMessage());
+            $result['error'] = 'DB error';
+        }
+    } else {
+        $ins = $db->prepare('INSERT INTO unmatched_leads (bot_id, chat_id, raw_text) VALUES (?, ?, ?)');
+        $ins->execute([0, $chatId ?: 'api-ladipage', $rawText]);
+        $log("API_LEAD: LadiPage lead unmatched, saved to unmatched_leads");
+        $result['reason'] = 'No channel matched';
+    }
+
+    // Forward to Telegram
+    forwardToTelegram($db, $botId, $chatId, $channelId, $rawText, $log);
+
+    echo json_encode($result, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// Mode 2: Raw text (original flow)
 if (trim($text) === '') {
     http_response_code(400);
-    echo json_encode(['ok' => false, 'error' => 'Missing text']);
+    echo json_encode(['ok' => false, 'error' => 'Missing text or phone']);
     exit;
 }
 
 $log("API_LEAD: received text=" . substr($text, 0, 200));
 
-$db = get_db();
-
-// Parse lead using rules (no chat_id filter — match all active rules)
 $rules = LeadParser::loadRulesFor($db, $chatId ?: null);
 $parsed = LeadParser::parse($text, $rules);
 
-$result = ['ok' => true, 'matched' => false];
-
 if ($parsed['channel_id']) {
-    // Save lead
     $f = $parsed['fields'];
     $phone = $f['phone'] ?? '';
     $cccd = $f['cccd'] ?? '';
@@ -102,40 +174,43 @@ if ($parsed['channel_id']) {
         }
     } else {
         $log("API_LEAD: rule matched but no phone/cccd");
-        $result['matched'] = false;
         $result['reason'] = 'No phone or cccd found';
     }
 } else {
-    // Unmatched lead
     $ins = $db->prepare('INSERT INTO unmatched_leads (bot_id, chat_id, raw_text) VALUES (?, ?, ?)');
     $ins->execute([0, $chatId ?: 'api', $text]);
     $log("API_LEAD: unmatched, saved to unmatched_leads");
     $result['reason'] = 'No rule matched';
 }
 
-// Forward to Telegram group
-if ($botId <= 0) {
-    $b = $db->query('SELECT id, token FROM bots WHERE is_default_reporter = 1 AND active = 1 LIMIT 1')->fetch();
-} else {
-    $b = $db->prepare('SELECT id, token FROM bots WHERE id = ? AND active = 1');
-    $b->execute([$botId]);
-    $b = $b->fetch();
-}
+forwardToTelegram($db, $botId, $chatId, $parsed['channel_id'] ?? 0, $text, $log);
 
-if ($b && $b['token']) {
-    // Determine chat_id to send to
+echo json_encode($result, JSON_UNESCAPED_UNICODE);
+
+// --- helpers ---
+
+function forwardToTelegram(PDO $db, int $botId, string $chatId, int $channelId, string $text, callable $log): void {
+    if ($botId <= 0) {
+        $b = $db->query('SELECT id, token FROM bots WHERE is_default_reporter = 1 AND active = 1 LIMIT 1')->fetch();
+    } else {
+        $b = $db->prepare('SELECT id, token FROM bots WHERE id = ? AND active = 1');
+        $b->execute([$botId]);
+        $b = $b->fetch();
+    }
+
+    if (!$b || !$b['token']) return;
+
     $targetChat = $chatId;
-    if (!$targetChat && $parsed['channel_id']) {
+    if (!$targetChat && $channelId > 0) {
         $chStmt = $db->prepare('SELECT source_chat_id FROM ad_channels WHERE id = ?');
-        $chStmt->execute([$parsed['channel_id']]);
+        $chStmt->execute([$channelId]);
         $targetChat = $chStmt->fetchColumn();
     }
 
     if ($targetChat) {
         $tg = new Telegram($b['token']);
-        $prefix = "📥 Thông báo dữ liệu từ LadiPage\n";
+        $prefix = "📥 Lead từ LadiPage\n";
         $resp = $tg->sendMessage($targetChat, $prefix . $text);
-        $result['forwarded'] = !empty($resp['ok']);
         if (!empty($resp['ok'])) {
             $log("API_LEAD: forwarded to chat $targetChat via bot #{$b['id']}");
         } else {
@@ -143,8 +218,6 @@ if ($b && $b['token']) {
         }
     }
 }
-
-echo json_encode($result, JSON_UNESCAPED_UNICODE);
 
 function normalize_key(?string $s): string {
     $s = trim(mb_strtolower((string)$s));
