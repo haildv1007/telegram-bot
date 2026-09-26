@@ -108,7 +108,7 @@ class AdsQueryEngine {
             $topSql .= ' AND cr.platform = ?';
             $topParams[] = $platform;
         }
-        $topSql .= ' GROUP BY s.credential_id, s.campaign_id, name, cr.platform ORDER BY spend DESC LIMIT 10';
+        $topSql .= ' GROUP BY s.credential_id, s.campaign_id, name, cr.platform';
         $tq = $this->db->prepare($topSql);
         $tq->execute($topParams);
         $topCamps = $tq->fetchAll();
@@ -122,6 +122,8 @@ class AdsQueryEngine {
             $c['cpc'] = $c['clicks'] > 0 ? round($c['spend'] / $c['clicks']) : 0;
         }
         unset($c);
+        usort($topCamps, fn($a, $b) => $b['spend'] <=> $a['spend']);
+        $topCamps = array_slice($topCamps, 0, 10);
 
         return [
             'range' => $label,
