@@ -296,8 +296,8 @@ $groups = $groups->fetchAll();
   <style>
     .sidebar { display: none; }
     .topbar { display: none; }
-    .main { margin-left: 0; padding: 16px; max-width: 1200px; margin: 0 auto; }
-    .partner-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .main { margin-left: 0; padding: 16px; }
+    .partner-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
     .partner-header h1 { font-size: 18px; margin: 0; }
     .partner-header .logout-btn { color: var(--text-dim); text-decoration: none; font-size: 13px; }
     .partner-header .logout-btn:hover { color: var(--text); }
@@ -315,6 +315,7 @@ $groups = $groups->fetchAll();
       .table th, .table td { padding: 6px 8px; }
       .card { margin-bottom: 12px; }
       .scope-tab, .chart-filter-btn { font-size: 12px; padding: 6px 10px; }
+      .chart-filters span { width: 100%; margin-left: 0 !important; margin-top: 6px; }
     }
   </style>
 </head>
@@ -341,6 +342,12 @@ $groups = $groups->fetchAll();
     <button type="button" class="chart-filter-btn" data-range="7" onclick="setRange('7')">7 ngày</button>
     <button type="button" class="chart-filter-btn" data-range="14" onclick="setRange('14')">14 ngày</button>
     <button type="button" class="chart-filter-btn" data-range="30" onclick="setRange('30')">30 ngày</button>
+    <span style="display:inline-flex;align-items:center;gap:6px;margin-left:8px">
+      <input type="date" id="dateFrom" class="form-control" style="padding:5px 8px;font-size:13px;width:auto">
+      <span class="text-muted">→</span>
+      <input type="date" id="dateTo" class="form-control" style="padding:5px 8px;font-size:13px;width:auto">
+      <button type="button" class="btn btn-sm btn-primary" onclick="applyCustomRange()">Lọc</button>
+    </span>
   </div>
   <div id="rangeLabel" class="text-muted mb-3" style="font-size:13px"></div>
 
@@ -409,12 +416,16 @@ function escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<
 const SLUG = '<?= h($slug) ?>';
 let currentScope = 'all', currentRange = 'today', currentTopTab = 'spend', lastData = null;
 
-function setRange(r) { currentRange = r; document.querySelectorAll('.chart-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.range === r)); loadData(); }
+let customFrom = '', customTo = '';
+function setRange(r) { currentRange = r; customFrom = ''; customTo = ''; document.querySelectorAll('.chart-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.range === r)); loadData(); }
+function applyCustomRange() { const f = document.getElementById('dateFrom').value, t = document.getElementById('dateTo').value; if (!f || !t) return; customFrom = f; customTo = t; currentRange = 'custom'; document.querySelectorAll('.chart-filter-btn').forEach(b => b.classList.remove('active')); loadData(); }
 function switchScope(s) { currentScope = s; document.querySelectorAll('.scope-tab').forEach(b => b.classList.toggle('active', b.dataset.scope === s)); loadData(); }
 function switchTopTab(t) { currentTopTab = t; document.getElementById('tabSpendBtn').classList.toggle('btn-primary', t==='spend'); document.getElementById('tabLeadsBtn').classList.toggle('btn-primary', t==='leads'); if (lastData) renderTopTable(lastData.top_campaigns, t); }
 
 async function loadData() {
-  const r = await fetch(`?slug=${SLUG}&api=1&range=${currentRange}`, {credentials:'same-origin'});
+  let url = `?slug=${SLUG}&api=1&range=${currentRange}`;
+  if (customFrom && customTo) url += `&from=${customFrom}&to=${customTo}`;
+  const r = await fetch(url, {credentials:'same-origin'});
   const d = await r.json();
   if (!d.ok) return;
   lastData = d;
