@@ -134,25 +134,29 @@ class ChatBot {
         if (!empty($data['top_campaigns'])) {
             $dataText .= "\nTop campaign hôm nay (chi tiết):\n";
             foreach (array_slice($data['top_campaigns'], 0, 5) as $c) {
-                $dataText .= "- {$c['name']} ({$c['platform']}): "
+                $rl = !empty($c['result_label']) ? ", Loại={$c['result_label']}" : '';
+                $al = !empty($c['account_label']) ? " [{$c['account_label']}]" : '';
+                $dataText .= "- {$c['name']} ({$c['platform']}{$al}): "
                     . "Spend=" . number_format($c['spend'], 0, ',', '.') . "đ, "
                     . "Impr=" . number_format($c['impressions']) . ", "
                     . "Clicks={$c['clicks']}, "
                     . "CTR=" . round($c['ctr'], 2) . "%, "
                     . "CPC=" . number_format($c['cpc'], 0, ',', '.') . "đ, "
-                    . "Conv={$c['conversions']}\n";
+                    . "Conv={$c['conversions']}{$rl}\n";
             }
         }
         if (!empty($monthData['top_campaigns'])) {
             $dataText .= "\nTop campaign tháng này (chi tiết):\n";
             foreach (array_slice($monthData['top_campaigns'], 0, 5) as $c) {
-                $dataText .= "- {$c['name']} ({$c['platform']}): "
+                $rl = !empty($c['result_label']) ? ", Loại={$c['result_label']}" : '';
+                $al = !empty($c['account_label']) ? " [{$c['account_label']}]" : '';
+                $dataText .= "- {$c['name']} ({$c['platform']}{$al}): "
                     . "Spend=" . number_format($c['spend'], 0, ',', '.') . "đ, "
                     . "Impr=" . number_format($c['impressions']) . ", "
                     . "Clicks={$c['clicks']}, "
                     . "CTR=" . round($c['ctr'], 2) . "%, "
                     . "CPC=" . number_format($c['cpc'], 0, ',', '.') . "đ, "
-                    . "Conv={$c['conversions']}\n";
+                    . "Conv={$c['conversions']}{$rl}\n";
             }
         }
 

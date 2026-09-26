@@ -96,9 +96,10 @@ class AdsQueryEngine {
         $unique = count(array_unique($keys));
 
         // Top campaigns
-        $topSql = "SELECT s.credential_id, COALESCE(camp.name, s.campaign_id) AS name, cr.platform,
+        $topSql = "SELECT s.credential_id, COALESCE(camp.name, s.campaign_id) AS name, cr.platform, cr.account_label,
                    SUM(s.spend) AS spend, SUM(s.impressions) AS impressions,
-                   SUM(s.clicks) AS clicks, SUM(s.conversions) AS conversions
+                   SUM(s.clicks) AS clicks, SUM(s.conversions) AS conversions,
+                   MAX(s.result_label) AS result_label
                    FROM ads_spend_cache s
                    LEFT JOIN campaigns camp ON camp.credential_id = s.credential_id AND camp.platform_campaign_id = s.campaign_id
                    LEFT JOIN ads_credentials cr ON cr.id = s.credential_id
