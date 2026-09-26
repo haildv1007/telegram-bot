@@ -425,7 +425,40 @@ function renderLineChart(container, labels, values, colorVar, valueFormatter) {
     gridLines += `<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="var(--border)" stroke-width="1"/>`;
     gridLines += `<text x="${padL-8}" y="${gy+4}" text-anchor="end" font-size="10" fill="var(--text-dim)">${formatCompact(gv)}</text>`;
   }
-  container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${gridLines}<path d="${areaPath}" fill="${color}" opacity="0.1"/><path d="${linePath}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+  let xLabels = '';
+  const labelIdxs = values.length <= 7 ? labels.map((_, i) => i) : [0, Math.floor((values.length-1)/2), values.length-1];
+  labelIdxs.forEach(i => { xLabels += `<text x="${x(i)}" y="${H-8}" text-anchor="middle" font-size="10" fill="var(--text-dim)">${labels[i]}</text>`; });
+  const lastX = x(values.length-1), lastY = y(values[values.length-1]);
+  container.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+      ${gridLines}
+      <path d="${areaPath}" fill="${color}" opacity="0.1"/>
+      <path d="${linePath}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${lastX}" cy="${lastY}" r="4" fill="${color}" stroke="var(--surface-1)" stroke-width="2"/>
+      ${xLabels}
+      <line class="crosshair" x1="0" y1="${padT}" x2="0" y2="${padT+innerH}" stroke="var(--text-dim)" stroke-width="1" opacity="0" />
+      <rect class="hit-area" x="${padL}" y="${padT}" width="${innerW}" height="${innerH}" fill="transparent" style="cursor:crosshair"/>
+    </svg>
+    <div class="chart-tooltip"></div>`;
+  const svgEl = container.querySelector('svg');
+  const crosshair = container.querySelector('.crosshair');
+  const hitArea = container.querySelector('.hit-area');
+  const tooltip = container.querySelector('.chart-tooltip');
+  hitArea.addEventListener('mousemove', (e) => {
+    const rect = svgEl.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const mx = (e.clientX - rect.left) * scaleX;
+    let idx = values.length > 1 ? Math.round((mx - padL) / stepX) : 0;
+    idx = Math.max(0, Math.min(values.length - 1, idx));
+    const px = x(idx);
+    crosshair.setAttribute('x1', px); crosshair.setAttribute('x2', px); crosshair.setAttribute('opacity', '1');
+    const scaleXPage = rect.width / W, scaleYPage = rect.height / H;
+    tooltip.style.left = (px * scaleXPage) + 'px';
+    tooltip.style.top = (y(values[idx]) * scaleYPage) + 'px';
+    tooltip.innerHTML = `<div class="tt-date">${labels[idx]}</div><div class="tt-value"><span class="tt-key" style="background:${color}"></span>${valueFormatter(values[idx])}</div>`;
+    tooltip.classList.add('visible');
+  });
+  hitArea.addEventListener('mouseleave', () => { crosshair.setAttribute('opacity', '0'); tooltip.classList.remove('visible'); });
 }
 function formatCompact(n) { if (n >= 1e6) return (n/1e6).toFixed(1).replace('.0','')+'M'; if (n >= 1e3) return (n/1e3).toFixed(0)+'K'; return String(n); }
 function fmtNum(n) { return Number(n).toLocaleString('vi-VN'); }
