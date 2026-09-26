@@ -69,12 +69,14 @@ class ChatBot {
     private function parseIntent(string $message, array $context): ?array {
         $channelList = array_map(fn($c) => "- ID={$c['id']}, tên=\"{$c['name']}\", nhóm=\"{$c['group_name']}\"", $context['channels']);
         $groupList = array_map(fn($g) => "- ID={$g['id']}, tên=\"{$g['name']}\"", $context['groups']);
+        $credList = array_map(fn($c) => "- ID={$c['id']}, platform={$c['platform']}, account_id={$c['account_id']}, nhãn=\"{$c['account_label']}\", tiền={$c['currency']}", $context['credentials'] ?? []);
         $campList = array_map(fn($c) => "- tên=\"{$c['name']}\", platform={$c['platform']}, channel=\"{$c['channel_name']}\"", array_slice($context['campaigns'], 0, 20));
 
         $systemPrompt = "Bạn là bộ phân tích ý định (intent parser) cho hệ thống quảng cáo. "
             . "Hệ thống có:\n"
             . "CHANNELS:\n" . implode("\n", $channelList) . "\n\n"
             . "NHÓM CHANNEL:\n" . implode("\n", $groupList) . "\n\n"
+            . "TÀI KHOẢN ADS (credentials):\n" . implode("\n", $credList) . "\n\n"
             . "CAMPAIGNS (mẫu):\n" . implode("\n", $campList) . "\n\n"
             . "Hôm nay: " . date('Y-m-d') . " (" . $this->vietnameseDay() . ")\n\n"
             . "Phân tích câu hỏi và trả về JSON (KHÔNG markdown, KHÔNG giải thích):\n"

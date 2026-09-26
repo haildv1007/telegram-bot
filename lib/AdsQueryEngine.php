@@ -3,12 +3,24 @@
  * AdsQueryEngine — truy vấn DB trả về số liệu quảng cáo chính xác.
  */
 require_once __DIR__ . '/RangeHelper.php';
+require_once __DIR__ . '/CurrencyHelper.php';
 
 class AdsQueryEngine {
     private PDO $db;
+    private float $exRate;
+    private array $currencyMap;
 
     public function __construct(PDO $db) {
         $this->db = $db;
+        $this->exRate = CurrencyHelper::getRate($db);
+        $this->currencyMap = [];
+        foreach ($db->query('SELECT id, currency FROM ads_credentials')->fetchAll() as $cr) {
+            $this->currencyMap[(int)$cr['id']] = $cr['currency'] ?? 'VND';
+        }
+    }
+
+    private function convertSpend(float $spend, int $credId): float {
+        return ($this->currencyMap[$credId] ?? 'VND') === 'USD' ? $spend * $this->exRate : $spend;
     }
 
     public function execute(array $params): array {
@@ -31,6 +43,8 @@ class AdsQueryEngine {
         $channels = $this->db->query('SELECT c.id, c.name, c.group_id, g.name AS group_name FROM ad_channels c LEFT JOIN channel_groups g ON g.id = c.group_id WHERE c.active = 1 ORDER BY c.id')->fetchAll();
         $groups = $this->db->query('SELECT id, name FROM channel_groups ORDER BY id')->fetchAll();
 
+        $credentials = $this->db->query('SELECT id, platform, account_id, account_label, currency FROM ads_credentials WHERE active = 1 ORDER BY id')->fetchAll();
+
         $campaigns = $this->db->query("
             SELECT c.id, c.name, c.platform_campaign_id, cr.platform, cr.account_label,
                    ac.name AS channel_name
@@ -41,7 +55,7 @@ class AdsQueryEngine {
             ORDER BY c.id
         ")->fetchAll();
 
-        return ['channels' => $channels, 'groups' => $groups, 'campaigns' => $campaigns];
+        return ['channels' => $channels, 'groups' => $groups, 'credentials' => $credentials, 'campaigns' => $campaigns];
     }
 
     private function resolveRange(array $params): array {
@@ -63,8 +77,8 @@ class AdsQueryEngine {
         $lq->execute([$startDt, $endDt]);
         $keys = $lq->fetchAll(PDO::FETCH_COLUMN);
 
-        // Spend
-        $spendSql = 'SELECT COALESCE(SUM(s.spend),0) FROM ads_spend_cache s';
+        // Spend (with currency conversion)
+        $spendSql = 'SELECT s.credential_id, SUM(s.spend) AS s FROM ads_spend_cache s';
         $spendParams = [$startDate, $endDate];
         if ($platform) {
             $spendSql .= ' JOIN ads_credentials cr ON cr.id = s.credential_id WHERE cr.platform = ? AND s.spend_date BETWEEN ? AND ?';
@@ -72,15 +86,17 @@ class AdsQueryEngine {
         } else {
             $spendSql .= ' WHERE s.spend_date BETWEEN ? AND ?';
         }
+        $spendSql .= ' GROUP BY s.credential_id';
         $sq = $this->db->prepare($spendSql);
         $sq->execute($spendParams);
-        $spend = (float)$sq->fetchColumn();
+        $spend = 0.0;
+        foreach ($sq as $_r) $spend += $this->convertSpend((float)$_r['s'], (int)$_r['credential_id']);
 
         $total = count($keys);
         $unique = count(array_unique($keys));
 
         // Top campaigns
-        $topSql = "SELECT COALESCE(camp.name, s.campaign_id) AS name, cr.platform,
+        $topSql = "SELECT s.credential_id, COALESCE(camp.name, s.campaign_id) AS name, cr.platform,
                    SUM(s.spend) AS spend, SUM(s.impressions) AS impressions,
                    SUM(s.clicks) AS clicks, SUM(s.conversions) AS conversions
                    FROM ads_spend_cache s
@@ -92,13 +108,13 @@ class AdsQueryEngine {
             $topSql .= ' AND cr.platform = ?';
             $topParams[] = $platform;
         }
-        $topSql .= ' GROUP BY s.campaign_id, name, cr.platform ORDER BY spend DESC LIMIT 10';
+        $topSql .= ' GROUP BY s.credential_id, s.campaign_id, name, cr.platform ORDER BY spend DESC LIMIT 10';
         $tq = $this->db->prepare($topSql);
         $tq->execute($topParams);
         $topCamps = $tq->fetchAll();
 
         foreach ($topCamps as &$c) {
-            $c['spend'] = (float)$c['spend'];
+            $c['spend'] = $this->convertSpend((float)$c['spend'], (int)$c['credential_id']);
             $c['impressions'] = (int)$c['impressions'];
             $c['clicks'] = (int)$c['clicks'];
             $c['conversions'] = (int)$c['conversions'];
@@ -223,7 +239,7 @@ class AdsQueryEngine {
         $sq->execute([$camp['credential_id'], $camp['platform_campaign_id'], $startDate, $endDate]);
         $stats = $sq->fetch();
 
-        $spend = (float)($stats['spend'] ?? 0);
+        $spend = $this->convertSpend((float)($stats['spend'] ?? 0), (int)$camp['credential_id']);
         $impr = (int)($stats['impressions'] ?? 0);
         $clicks = (int)($stats['clicks'] ?? 0);
         $conv = (int)($stats['conversions'] ?? 0);
@@ -311,8 +327,10 @@ class AdsQueryEngine {
                 $params = array_merge($params, $campIds);
             }
         }
-        $q = $this->db->prepare("SELECT COALESCE(SUM(spend),0) FROM ads_spend_cache WHERE credential_id IN ($ph) AND spend_date BETWEEN ? AND ?$extra");
+        $q = $this->db->prepare("SELECT credential_id, SUM(spend) AS s FROM ads_spend_cache WHERE credential_id IN ($ph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
         $q->execute($params);
-        return (float)$q->fetchColumn();
+        $total = 0.0;
+        foreach ($q as $_r) $total += $this->convertSpend((float)$_r['s'], (int)$_r['credential_id']);
+        return $total;
     }
 }
