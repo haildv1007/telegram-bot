@@ -7,6 +7,7 @@ class RangeHelper {
         $today = date('Y-m-d');
         switch ($type) {
             case 'today': return [$today, $today, 'Hôm nay'];
+            case 'yesterday': $y = date('Y-m-d', strtotime('-1 day')); return [$y, $y, 'Hôm qua'];
             case 'week':  return [date('Y-m-d', strtotime('monday this week')), $today, 'Tuần này'];
             case '7':     return [date('Y-m-d', strtotime('-6 days')), $today, '7 ngày gần nhất'];
             case '30':    return [date('Y-m-d', strtotime('-29 days')), $today, '30 ngày gần nhất'];

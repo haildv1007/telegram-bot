@@ -140,6 +140,7 @@ if (isset($_GET['api'])) {
         if (empty($credIds) && !empty($ch['credential_id'])) $credIds = [(int)$ch['credential_id']];
 
         $chSpend = 0.0;
+        $chConv = 0;
         if (!empty($credIds)) {
             $cph = implode(',', array_fill(0, count($credIds), '?'));
             $params = array_merge($credIds, [$startDate, $endDate]);
@@ -152,11 +153,12 @@ if (isset($_GET['api'])) {
                     $params = array_merge($params, $campIds);
                 }
             }
-            $sq = $db->prepare("SELECT credential_id, SUM(spend) AS s FROM ads_spend_cache WHERE credential_id IN ($cph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
+            $sq = $db->prepare("SELECT credential_id, SUM(spend) AS s, SUM(conversions) AS conv FROM ads_spend_cache WHERE credential_id IN ($cph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
             $sq->execute($params);
             foreach ($sq as $_r) {
                 $converted = (($currencyMap[(int)$_r['credential_id']] ?? 'VND') === 'USD') ? (float)$_r['s'] * $exRate : (float)$_r['s'];
                 $chSpend += $converted;
+                $chConv += (int)$_r['conv'];
             }
         }
 
@@ -172,6 +174,7 @@ if (isset($_GET['api'])) {
             'cred_platforms' => $ch['cred_platforms'], 'active' => true,
             'leads' => $chTotal, 'leads_unique' => $chUnique, 'spend' => $chSpend,
             'cpl' => $chUnique > 0 ? round($chSpend / $chUnique) : 0,
+            'conversions' => $chConv, 'cpa' => $chConv > 0 ? round($chSpend / $chConv) : 0,
         ];
     }
 
@@ -334,7 +337,6 @@ $groups = $groups->fetchAll();
       .table th, .table td { padding: 6px 8px; }
       .card { margin-bottom: 12px; }
       .scope-tab, .chart-filter-btn { font-size: 12px; padding: 6px 10px; }
-      .chart-filters span { width: 100%; margin-left: 0 !important; margin-top: 6px; }
     }
   </style>
 </head>
@@ -358,15 +360,26 @@ $groups = $groups->fetchAll();
 
   <div class="chart-filters" id="rangeFilters">
     <button type="button" class="chart-filter-btn active" data-range="today" onclick="setRange('today')">Hôm nay</button>
+    <button type="button" class="chart-filter-btn" data-range="yesterday" onclick="setRange('yesterday')">Hôm qua</button>
     <button type="button" class="chart-filter-btn" data-range="7" onclick="setRange('7')">7 ngày</button>
     <button type="button" class="chart-filter-btn" data-range="14" onclick="setRange('14')">14 ngày</button>
     <button type="button" class="chart-filter-btn" data-range="30" onclick="setRange('30')">30 ngày</button>
-    <span style="display:inline-flex;align-items:center;gap:6px;margin-left:8px">
-      <input type="date" id="dateFrom" class="form-control" style="padding:5px 8px;font-size:13px;width:auto">
-      <span class="text-muted">→</span>
-      <input type="date" id="dateTo" class="form-control" style="padding:5px 8px;font-size:13px;width:auto">
-      <button type="button" class="btn btn-sm btn-primary" onclick="applyCustomRange()">Lọc</button>
-    </span>
+    <div style="position:relative;display:inline-block">
+      <button type="button" class="chart-filter-btn" id="customToggleBtn" onclick="toggleCustomDropdown()">Tùy chỉnh ▾</button>
+      <div id="customDropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:20;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:6px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,0.4)">
+        <button type="button" class="btn" style="width:100%;justify-content:flex-start;margin-bottom:4px" onclick="pickPreset('today')">Hôm nay</button>
+        <button type="button" class="btn" style="width:100%;justify-content:flex-start;margin-bottom:4px" onclick="pickPreset('week')">Tuần này</button>
+        <button type="button" class="btn" style="width:100%;justify-content:flex-start;margin-bottom:8px" onclick="pickPreset('month')">Tháng này</button>
+        <div style="border-top:1px solid var(--border);padding-top:8px">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="date" id="dateFrom" class="form-control" style="width:140px">
+            <span class="text-muted">→</span>
+            <input type="date" id="dateTo" class="form-control" style="width:140px">
+          </div>
+          <button type="button" class="btn btn-sm btn-primary" style="width:100%;margin-top:8px" onclick="applyCustomRange()">Áp dụng</button>
+        </div>
+      </div>
+    </div>
   </div>
   <div id="rangeLabel" class="text-muted mb-3" style="font-size:13px"></div>
 
@@ -469,8 +482,11 @@ const SLUG = '<?= h($slug) ?>';
 let currentScope = 'all', currentRange = 'today', currentTopTab = 'spend', lastData = null;
 
 let customFrom = '', customTo = '';
-function setRange(r) { currentRange = r; customFrom = ''; customTo = ''; document.querySelectorAll('.chart-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.range === r)); loadData(); }
-function applyCustomRange() { const f = document.getElementById('dateFrom').value, t = document.getElementById('dateTo').value; if (!f || !t) return; customFrom = f; customTo = t; currentRange = 'custom'; document.querySelectorAll('.chart-filter-btn').forEach(b => b.classList.remove('active')); loadData(); }
+function setRange(r) { currentRange = r; customFrom = ''; customTo = ''; document.querySelectorAll('.chart-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.range === r)); closeCustomDropdown(); loadData(); }
+function applyCustomRange() { const f = document.getElementById('dateFrom').value, t = document.getElementById('dateTo').value; if (!f || !t) return; customFrom = f; customTo = t; currentRange = 'custom'; document.querySelectorAll('.chart-filter-btn').forEach(b => b.classList.remove('active')); document.getElementById('customToggleBtn').classList.add('active'); closeCustomDropdown(); loadData(); }
+function pickPreset(p) { currentRange = p; customFrom = ''; customTo = ''; document.querySelectorAll('.chart-filter-btn').forEach(b => b.classList.remove('active')); document.getElementById('customToggleBtn').classList.add('active'); closeCustomDropdown(); loadData(); }
+function toggleCustomDropdown() { const dd = document.getElementById('customDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
+function closeCustomDropdown() { document.getElementById('customDropdown').style.display = 'none'; }
 function switchScope(s) { currentScope = s; document.querySelectorAll('.scope-tab').forEach(b => b.classList.toggle('active', b.dataset.scope === s)); loadData(); }
 function switchTopTab(t) { currentTopTab = t; document.getElementById('tabSpendBtn').classList.toggle('btn-primary', t==='spend'); document.getElementById('tabLeadsBtn').classList.toggle('btn-primary', t==='leads'); if (lastData) renderTopTable(lastData.top_campaigns, t); }
 
@@ -514,11 +530,11 @@ async function loadData() {
   renderTopTable(campaigns, currentTopTab);
 
   // Channels overview
-  let coHtml = '<table class="table"><thead><tr><th>Channel</th><th>Ads</th><th>Leads</th><th>Spend</th><th>CPL</th></tr></thead><tbody>';
-  if (chOverview.length === 0) coHtml += '<tr><td colspan="5" class="text-muted" style="text-align:center">Chưa có dữ liệu</td></tr>';
+  let coHtml = '<table class="table"><thead><tr><th>Channel</th><th>Ads</th><th>Leads</th><th>Spend</th><th>CPL</th><th>Conv</th><th>CPA</th></tr></thead><tbody>';
+  if (chOverview.length === 0) coHtml += '<tr><td colspan="7" class="text-muted" style="text-align:center">Chưa có dữ liệu</td></tr>';
   chOverview.forEach(c => {
     const pb = c.cred_platforms ? c.cred_platforms.split(',').map(p => `<span class="badge ${p==='google'?'badge-accent':'badge-warn'}">${p.substring(0,2).toUpperCase()}</span>`).join(' ') : '—';
-    coHtml += `<tr><td><strong>${escHtml(c.name)}</strong></td><td>${pb}</td><td>${c.leads} <span class="muted">(u: ${c.leads_unique})</span></td><td class="mono">${fmtMoney(c.spend)}</td><td class="mono">${fmtMoney(c.cpl)}</td></tr>`;
+    coHtml += `<tr><td><strong>${escHtml(c.name)}</strong></td><td>${pb}</td><td>${c.leads} <span class="muted">(u: ${c.leads_unique})</span></td><td class="mono">${fmtMoney(c.spend)}</td><td class="mono">${fmtMoney(c.cpl)}</td><td>${c.conversions||0}</td><td class="mono">${fmtMoney(c.cpa||0)}</td></tr>`;
   });
   coHtml += '</tbody></table>';
   document.getElementById('channelsOverviewOut').innerHTML = coHtml;

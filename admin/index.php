@@ -27,6 +27,7 @@ include __DIR__ . '/layout.php';
 
 <div class="chart-filters" id="rangeFilters" style="position:relative">
   <button type="button" class="chart-filter-btn" data-range="today" onclick="setRange('today')">Hôm nay</button>
+  <button type="button" class="chart-filter-btn" data-range="yesterday" onclick="setRange('yesterday')">Hôm qua</button>
   <button type="button" class="chart-filter-btn active" data-range="7" onclick="setRange('7')">7 ngày</button>
   <button type="button" class="chart-filter-btn" data-range="14" onclick="setRange('14')">14 ngày</button>
   <button type="button" class="chart-filter-btn" data-range="30" onclick="setRange('30')">30 ngày</button>
@@ -355,11 +356,11 @@ function renderChannelsOverviewTable(rows, rangeLabel) {
   });
 
   let html = '<table class="table"><thead><tr>' +
-    '<th>Channel</th><th>Ads</th><th>Lead (' + escapeHtmlG(rangeLabel) + ')</th><th>Spend (' + escapeHtmlG(rangeLabel) + ')</th><th>CPL</th><th>Lịch báo cáo</th><th>Trạng thái</th>' +
+    '<th>Channel</th><th>Ads</th><th>Lead</th><th>Spend</th><th>CPL</th><th>Conv</th><th>CPA</th><th>Lịch báo cáo</th><th>Trạng thái</th>' +
     '</tr></thead><tbody>';
 
   if (rows.length === 0) {
-    html += '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:24px;">Chưa có channel nào.</td></tr>';
+    html += '<tr><td colspan="9" class="text-muted" style="text-align:center;padding:24px;">Chưa có channel nào.</td></tr>';
   }
 
   function platformBadges(csv) {
@@ -371,14 +372,16 @@ function renderChannelsOverviewTable(rows, rangeLabel) {
   }
 
   Object.values(groups).forEach(g => {
-    let gl=0, gu=0, gs=0; let anyActive = false;
-    g.members.forEach(m => { gl+=m.leads; gu+=m.leads_unique; gs+=m.spend; if (m.active) anyActive = true; });
+    let gl=0, gu=0, gs=0, gc=0; let anyActive = false;
+    g.members.forEach(m => { gl+=m.leads; gu+=m.leads_unique; gs+=m.spend; gc+=(m.conversions||0); if (m.active) anyActive = true; });
     const gcpl = gu > 0 ? Math.round(gs/gu) : 0;
+    const gcpa = gc > 0 ? Math.round(gs/gc) : 0;
     html += '<tr style="background:var(--surface-2)"><td><strong>' + escapeHtmlG(g.name) + '</strong> <span class="badge badge-accent" style="margin-left:6px">Nhóm ×' + g.members.length + '</span></td>' +
       '<td>' + platformBadges([...new Set(g.members.flatMap(m => m.cred_platforms ? m.cred_platforms.split(',') : []))].join(',')) + '</td>' +
       '<td>' + gl + ' <span class="muted">(u: ' + gu + ')</span></td>' +
       '<td class="mono">' + fmtMoney(gs) + '</td>' +
       '<td class="mono">' + fmtMoney(gcpl) + '</td>' +
+      '<td>' + gc + '</td><td class="mono">' + fmtMoney(gcpa) + '</td>' +
       '<td class="text-dim">—</td><td>' + statusBadge(anyActive) + '</td></tr>';
     g.members.forEach(m => {
       html += '<tr><td style="padding-left:32px"><span class="text-dim">↳</span> ' + escapeHtmlG(m.name) + '<div class="mono text-dim" style="font-size:11px">#' + m.id + '</div></td>' +
@@ -386,6 +389,7 @@ function renderChannelsOverviewTable(rows, rangeLabel) {
         '<td>' + m.leads + ' <span class="muted">(u: ' + m.leads_unique + ')</span></td>' +
         '<td class="mono">' + fmtMoney(m.spend) + '</td>' +
         '<td class="mono">' + fmtMoney(m.cpl) + '</td>' +
+        '<td>' + (m.conversions||0) + '</td><td class="mono">' + fmtMoney(m.cpa||0) + '</td>' +
         '<td class="mono">' + escapeHtmlG(m.schedules || '—') + '</td>' +
         '<td>' + statusBadge(m.active) + '</td></tr>';
     });
@@ -397,6 +401,7 @@ function renderChannelsOverviewTable(rows, rangeLabel) {
       '<td>' + c.leads + ' <span class="muted">(u: ' + c.leads_unique + ')</span></td>' +
       '<td class="mono">' + fmtMoney(c.spend) + '</td>' +
       '<td class="mono">' + fmtMoney(c.cpl) + '</td>' +
+      '<td>' + (c.conversions||0) + '</td><td class="mono">' + fmtMoney(c.cpa||0) + '</td>' +
       '<td class="mono">' + escapeHtmlG(c.schedules || '—') + '</td>' +
       '<td>' + statusBadge(c.active) + '</td></tr>';
   });

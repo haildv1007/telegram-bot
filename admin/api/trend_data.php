@@ -120,6 +120,7 @@ function range_channel_stats(PDO $db, array $channel, string $startDt, string $e
     if (empty($credIds) && !empty($channel['credential_id'])) $credIds = [(int)$channel['credential_id']];
 
     $spend = 0.0;
+    $conversions = 0;
     if (!empty($credIds)) {
         global $exRate, $currencyMap;
         $ph = implode(',', array_fill(0, count($credIds), '?'));
@@ -133,9 +134,9 @@ function range_channel_stats(PDO $db, array $channel, string $startDt, string $e
                 $params = array_merge($params, $campIds);
             }
         }
-        $q = $db->prepare("SELECT credential_id, SUM(spend) AS s FROM ads_spend_cache WHERE credential_id IN ($ph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
+        $q = $db->prepare("SELECT credential_id, SUM(spend) AS s, SUM(conversions) AS conv FROM ads_spend_cache WHERE credential_id IN ($ph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
         $q->execute($params);
-        foreach ($q as $_r) $spend += convertSpend((float)$_r['s'], (int)$_r['credential_id'], $exRate, $currencyMap);
+        foreach ($q as $_r) { $spend += convertSpend((float)$_r['s'], (int)$_r['credential_id'], $exRate, $currencyMap); $conversions += (int)$_r['conv']; }
     }
     if ($spend <= 0) {
         $bq = $db->prepare('SELECT COALESCE(SUM(budget),0) FROM ad_budget WHERE budget_date BETWEEN ? AND ? AND channel_id = ?');
@@ -145,7 +146,8 @@ function range_channel_stats(PDO $db, array $channel, string $startDt, string $e
 
     $total = count($keys);
     $unique = count(array_unique($keys));
-    return ['leads' => $total, 'leads_unique' => $unique, 'spend' => $spend, 'cpl' => $unique > 0 ? round($spend / $unique) : 0];
+    $cpa = $conversions > 0 ? round($spend / $conversions) : 0;
+    return ['leads' => $total, 'leads_unique' => $unique, 'spend' => $spend, 'cpl' => $unique > 0 ? round($spend / $unique) : 0, 'conversions' => $conversions, 'cpa' => $cpa];
 }
 
 $channels = $db->query("
