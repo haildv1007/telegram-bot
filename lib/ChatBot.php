@@ -133,7 +133,7 @@ class ChatBot {
 
         if (!empty($data['top_campaigns'])) {
             $dataText .= "\nTop campaign hôm nay (chi tiết):\n";
-            foreach (array_slice($data['top_campaigns'], 0, 5) as $c) {
+            foreach ($data['top_campaigns'] as $c) {
                 $rl = !empty($c['result_label']) ? ", Loại={$c['result_label']}" : '';
                 $al = !empty($c['account_label']) ? " [{$c['account_label']}]" : '';
                 $dataText .= "- {$c['name']} ({$c['platform']}{$al}): "
@@ -147,7 +147,7 @@ class ChatBot {
         }
         if (!empty($monthData['top_campaigns'])) {
             $dataText .= "\nTop campaign tháng này (chi tiết):\n";
-            foreach (array_slice($monthData['top_campaigns'], 0, 5) as $c) {
+            foreach ($monthData['top_campaigns'] as $c) {
                 $rl = !empty($c['result_label']) ? ", Loại={$c['result_label']}" : '';
                 $al = !empty($c['account_label']) ? " [{$c['account_label']}]" : '';
                 $dataText .= "- {$c['name']} ({$c['platform']}{$al}): "
