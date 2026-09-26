@@ -133,7 +133,7 @@ class ChatBot {
 
         if (!empty($data['top_campaigns'])) {
             $dataText .= "\nTop campaign hôm nay (chi tiết):\n";
-            foreach ($data['top_campaigns'] as $c) {
+            foreach (array_slice($data['top_campaigns'], 0, 10) as $c) {
                 $rl = !empty($c['result_label']) ? ", Loại={$c['result_label']}" : '';
                 $al = !empty($c['account_label']) ? " [{$c['account_label']}]" : '';
                 $dataText .= "- {$c['name']} ({$c['platform']}{$al}): "
@@ -147,7 +147,7 @@ class ChatBot {
         }
         if (!empty($monthData['top_campaigns'])) {
             $dataText .= "\nTop campaign tháng này (chi tiết):\n";
-            foreach ($monthData['top_campaigns'] as $c) {
+            foreach (array_slice($monthData['top_campaigns'], 0, 10) as $c) {
                 $rl = !empty($c['result_label']) ? ", Loại={$c['result_label']}" : '';
                 $al = !empty($c['account_label']) ? " [{$c['account_label']}]" : '';
                 $dataText .= "- {$c['name']} ({$c['platform']}{$al}): "
@@ -157,6 +157,17 @@ class ChatBot {
                     . "CTR=" . round($c['ctr'], 2) . "%, "
                     . "CPC=" . number_format($c['cpc'], 0, ',', '.') . "đ, "
                     . "Conv={$c['conversions']}{$rl}\n";
+            }
+        }
+
+        // Channel breakdown hôm nay
+        foreach ($context['channels'] as $ch) {
+            $chData = $this->engine->execute(['action' => 'channel', 'channel_id' => $ch['id'], 'range' => 'today']);
+            if (!isset($chData['error'])) {
+                $dataText .= "\nChannel \"{$ch['name']}\" (nhóm: {$ch['group_name']}) hôm nay: "
+                    . "Spend=" . number_format($chData['spend'], 0, ',', '.') . "đ, "
+                    . "Lead={$chData['leads']} (unique: {$chData['leads_unique']}), "
+                    . "CPL=" . number_format($chData['cpl'], 0, ',', '.') . "đ\n";
             }
         }
 
