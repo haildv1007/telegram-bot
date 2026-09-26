@@ -46,7 +46,7 @@ $chatId = $input['chat_id'] ?? '';
 $botId = (int)($input['bot_id'] ?? 0);
 $channelId = (int)($input['channel_id'] ?? 0);
 
-// LadiPage fields
+// LadiPage fields (known + capture all extras)
 $lpName = trim($input['name'] ?? '');
 $lpPhone = trim($input['phone'] ?? '');
 $lpEmail = trim($input['email'] ?? '');
@@ -56,6 +56,15 @@ $lpIp = trim($input['ip'] ?? '');
 $lpArea = trim($input['area'] ?? '');
 $lpCccd = trim($input['cccd'] ?? '');
 $lpVehicle = trim($input['vehicle'] ?? '');
+
+// Capture all unknown fields from LadiPage
+$knownKeys = ['secret','text','chat_id','bot_id','channel_id','name','phone','email','message','source','ip','area','cccd','vehicle'];
+$extraFields = [];
+foreach ($input as $k => $v) {
+    if (!in_array($k, $knownKeys) && is_string($v) && trim($v) !== '') {
+        $extraFields[$k] = trim($v);
+    }
+}
 
 // Validate secret
 if ($secret !== WEBHOOK_SECRET) {
@@ -92,11 +101,30 @@ if ($lpPhone !== '' || $lpName !== '') {
     if ($lpVehicle !== '') $rawParts[] = "Phương Tiện : $lpVehicle";
     if ($lpEmail !== '') $rawParts[] = "Email : $lpEmail";
     if ($lpMessage !== '') $rawParts[] = $lpMessage;
+    foreach ($extraFields as $k => $v) $rawParts[] = "$k : $v";
     if ($lpSource !== '') $rawParts[] = "Nguồn từ: $lpSource";
     if ($lpIp !== '') $rawParts[] = "Địa chỉ IP: $lpIp";
     $rawText = implode("\n", $rawParts);
 
-    // Determine channel_id: from param → from source URL → from rules
+    // Try to find source URL from any field (LadiPage may send it under any name)
+    $allText = $rawText . ' ' . implode(' ', $extraFields);
+    if ($lpSource === '' && preg_match('#(https?://[^\s]+)#', $allText, $urlMatch)) {
+        $lpSource = $urlMatch[1];
+    }
+
+    // Extract gad_campaignid from source URL for campaign attribution
+    $platformCampaignId = '';
+    if ($lpSource !== '' && preg_match('/gad_campaignid=(\d+)/', $lpSource, $gadMatch)) {
+        $platformCampaignId = $gadMatch[1];
+    }
+
+    // Determine channel_id: from param → from UTM campaign → from source domain → from rules
+    if ($channelId <= 0 && $platformCampaignId !== '') {
+        $stmt = $db->prepare('SELECT id FROM ad_channels WHERE platform_campaign_id LIKE ? AND active = 1 LIMIT 1');
+        $stmt->execute(["%$platformCampaignId%"]);
+        $channelId = (int)$stmt->fetchColumn();
+        $log("API_LEAD: matched by gad_campaignid=$platformCampaignId → channel $channelId");
+    }
     if ($channelId <= 0 && $lpSource !== '') {
         $channelId = detectChannelFromSource($db, $lpSource);
     }
@@ -113,7 +141,7 @@ if ($lpPhone !== '' || $lpName !== '') {
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ');
             $stmt->execute([
-                $channelId, '', $createdAt, $name, $phone, $lpCccd, $lpArea, $lpVehicle, $lpSource ?: 'ladipage', $lpIp, $dupKey, $rawText,
+                $channelId, $platformCampaignId, $createdAt, $name, $phone, $lpCccd, $lpArea, $lpVehicle, $lpSource ?: 'ladipage', $lpIp, $dupKey, $rawText,
             ]);
             $log("API_LEAD: saved LadiPage lead to channel $channelId dup_key=$dupKey");
             $result['matched'] = true;
