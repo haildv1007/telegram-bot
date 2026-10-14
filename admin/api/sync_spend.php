@@ -25,7 +25,7 @@ try {
     echo json_encode([
         'ok' => true,
         'rows' => count($rows),
-        'preview' => array_slice($rows, 0, 5),
+        'preview' => array_slice($rows, -5),
     ], JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {
     echo json_encode(['ok'=>false, 'error'=>$e->getMessage()], JSON_UNESCAPED_UNICODE);

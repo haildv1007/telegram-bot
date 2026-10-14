@@ -43,6 +43,7 @@ class FacebookAdsClient {
         'lead'                                                 => 'Lead',
         'onsite_conversion.lead_grouped'                       => 'Lead',
         'offsite_conversion.fb_pixel_lead'                     => 'Lead',
+        'offsite_conversion.fb_pixel_custom'                   => 'Đăng ký',
         'offsite_conversion.fb_pixel_subscribe'                => 'Đăng ký',
         'omni_subscribe'                                       => 'Đăng ký',
         'subscribe'                                            => 'Đăng ký',
@@ -90,6 +91,7 @@ class FacebookAdsClient {
                     ...$customActions['purchase'],
                 ], ['purchase']);
                 $subscribes = self::pickActionCount($r['actions'] ?? [], [
+                    'offsite_conversion.fb_pixel_custom',
                     'offsite_conversion.fb_pixel_subscribe', 'onsite_conversion.subscribe', 'omni_subscribe', 'subscribe',
                     'offsite_conversion.fb_pixel_subscription', 'subscription',
                     ...$customActions['subscribe'],
