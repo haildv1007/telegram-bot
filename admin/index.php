@@ -311,11 +311,25 @@ function renderTopCampaignTable(campaigns, tab) {
       convCell = fmtNum(tc.conversions);
       cpaCell = fmtMoney(tc.cpa);
     } else {
-      convCell = '<div>Mua: ' + fmtNum(tc.purchases||0) + '</div>' +
-        '<div>Đăng ký: ' + fmtNum(tc.subscribes||0) + '</div>' +
+      const resultParts = [], costParts = [];
+      if ((tc.messages||0) > 0) { resultParts.push('Tin nhắn: ' + fmtNum(tc.messages)); costParts.push('Tin nhắn: ' + fmtMoney(Math.round(tc.spend/tc.messages))); }
+      if ((tc.facebook_leads||0) > 0) { resultParts.push('Lead FB: ' + fmtNum(tc.facebook_leads)); costParts.push('Lead FB: ' + fmtMoney(Math.round(tc.spend/tc.facebook_leads))); }
+      if (tc.result_label && !['Tin nhắn','Lead','Lượt mua','Đăng ký'].includes(tc.result_label)) {
+        resultParts.push(escapeHtmlG(tc.result_label) + ': ' + fmtNum(tc.conversions||0));
+        costParts.push(escapeHtmlG(tc.result_label) + ': ' + fmtMoney(tc.cost_per_result||0));
+      }
+      if ((tc.purchases||0) > 0) {
+        resultParts.push('Mua: ' + fmtNum(tc.purchases));
+        costParts.push('Mua: ' + fmtMoney(Math.round(tc.spend/tc.purchases)));
+      }
+      if ((tc.subscribes||0) > 0) {
+        resultParts.push('Đăng ký: ' + fmtNum(tc.subscribes));
+        costParts.push('ĐK: ' + fmtMoney(Math.round(tc.spend/tc.subscribes)));
+      }
+      if (resultParts.length === 0) resultParts.push('Chưa có kết quả');
+      convCell = resultParts.map(v => '<div>' + v + '</div>').join('') +
         (tc.reach ? '<div class="muted" style="font-size:11px">Reach: ' + fmtNum(tc.reach) + ' · TS: ' + Number(tc.frequency).toFixed(2).replace('.',',') + '</div>' : '');
-      cpaCell = '<div>Mua: ' + fmtMoney((tc.purchases||0) > 0 ? Math.round(tc.spend/tc.purchases) : 0) + '</div>' +
-        '<div>ĐK: ' + fmtMoney((tc.subscribes||0) > 0 ? Math.round(tc.spend/tc.subscribes) : 0) + '</div>';
+      cpaCell = costParts.length ? costParts.map(v => '<div>' + v + '</div>').join('') : '—';
     }
     html += '<tr>' +
       '<td class="mono text-dim">' + (i+1) + '</td>' +
@@ -429,7 +443,7 @@ function renderGroupBreakdown(data) {
         const platformBadge = '<span class="badge ' + (c.platform === 'google' ? 'badge-accent' : 'badge-warn') + '">' + (c.platform||'').substring(0,2).toUpperCase() + '</span>';
         const convCell = c.platform === 'google'
           ? c.conversions + ' <span class="muted">(CPA ' + fmtMoney(c.cpa) + ')</span>'
-          : 'Mua: ' + (c.purchases||0) + ' · ĐK: ' + (c.subscribes||0);
+          : 'Tin nhắn: ' + (c.messages||0) + ' · Lead FB: ' + (c.facebook_leads||0) + ' · Mua: ' + (c.purchases||0) + ' · ĐK: ' + (c.subscribes||0);
         html += '<tr>' +
           '<td><strong>' + escapeHtmlG(c.name) + '</strong></td>' +
           '<td>' + platformBadge + ' <span class="muted" style="font-size:12px">' + escapeHtmlG(c.account_label||'') + '</span></td>' +

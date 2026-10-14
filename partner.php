@@ -151,7 +151,7 @@ if (isset($_GET['api'])) {
         if (empty($credIds) && !empty($ch['credential_id'])) $credIds = [(int)$ch['credential_id']];
 
         $chSpend = 0.0;
-        $chConv = 0; $chPurchases = 0; $chSubscribes = 0;
+        $chConv = 0; $chPurchases = 0; $chSubscribes = 0; $chMessages = 0; $chFacebookLeads = 0;
         if (!empty($credIds)) {
             $cph = implode(',', array_fill(0, count($credIds), '?'));
             $params = array_merge($credIds, [$startDate, $endDate]);
@@ -164,7 +164,7 @@ if (isset($_GET['api'])) {
                     $params = array_merge($params, $campIds);
                 }
             }
-            $sq = $db->prepare("SELECT credential_id, SUM(spend) AS s, SUM(conversions) AS conv, SUM(purchases) AS purchases, SUM(subscribes) AS subscribes FROM ads_spend_cache WHERE credential_id IN ($cph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
+            $sq = $db->prepare("SELECT credential_id, SUM(spend) AS s, SUM(conversions) AS conv, SUM(purchases) AS purchases, SUM(subscribes) AS subscribes, SUM(messages) AS messages, SUM(facebook_leads) AS facebook_leads FROM ads_spend_cache WHERE credential_id IN ($cph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
             $sq->execute($params);
             foreach ($sq as $_r) {
                 $converted = (($currencyMap[(int)$_r['credential_id']] ?? 'VND') === 'USD') ? (float)$_r['s'] * $exRate : (float)$_r['s'];
@@ -172,6 +172,8 @@ if (isset($_GET['api'])) {
                 $chConv += (int)$_r['conv'];
                 $chPurchases += (int)$_r['purchases'];
                 $chSubscribes += (int)$_r['subscribes'];
+                $chMessages += (int)$_r['messages'];
+                $chFacebookLeads += (int)$_r['facebook_leads'];
             }
         }
 
@@ -189,6 +191,7 @@ if (isset($_GET['api'])) {
             'cpl' => $chUnique > 0 ? round($chSpend / $chUnique) : 0,
             'conversions' => $chConv, 'cpa' => $chConv > 0 ? round($chSpend / $chConv) : 0,
             'purchases' => $chPurchases, 'subscribes' => $chSubscribes,
+            'messages' => $chMessages, 'facebook_leads' => $chFacebookLeads,
         ];
     }
 
@@ -223,6 +226,7 @@ if (isset($_GET['api'])) {
                 cr.platform, cr.account_label,
                 SUM(s.spend) AS spend, SUM(s.impressions) AS impressions, SUM(s.clicks) AS clicks,
                 SUM(s.conversions) AS conversions, SUM(s.purchases) AS purchases, SUM(s.subscribes) AS subscribes,
+                SUM(s.messages) AS messages, SUM(s.facebook_leads) AS facebook_leads,
                 SUM(s.reach) AS reach, AVG(s.frequency) AS frequency,
                 MAX(s.result_label) AS result_label
             FROM ads_spend_cache s
@@ -246,6 +250,8 @@ if (isset($_GET['api'])) {
             $tc['conversions'] = (int)$tc['conversions'];
             $tc['purchases'] = (int)$tc['purchases'];
             $tc['subscribes'] = (int)$tc['subscribes'];
+            $tc['messages'] = (int)$tc['messages'];
+            $tc['facebook_leads'] = (int)$tc['facebook_leads'];
             $tc['reach'] = (int)$tc['reach'];
             $tc['frequency'] = (float)$tc['frequency'];
             $tc['cpc'] = $tc['clicks'] > 0 ? round($tc['spend'] / $tc['clicks']) : 0;
@@ -576,8 +582,23 @@ function renderTopTable(campaigns, tab) {
   let html = '<table class="table"><thead><tr><th>#</th><th>Campaign</th><th>TKQC</th><th>Impr</th><th>Clicks</th><th>CTR</th><th>CPC</th><th>Spend</th><th>Kết quả</th><th>Chi phí/KQ</th><th>Leads</th><th>CPL</th></tr></thead><tbody>';
   list.forEach((tc, i) => {
     const pb = `<span class="badge ${tc.platform==='google'?'badge-accent':'badge-warn'}">${(tc.platform||'').substring(0,2).toUpperCase()}</span>`;
-    const resultCell = tc.platform === 'facebook' ? `Mua: ${fmtNum(tc.purchases||0)}<br>Đăng ký: ${fmtNum(tc.subscribes||0)}` : fmtNum(tc.conversions);
-    const costCell = tc.platform === 'facebook' ? `Mua: ${fmtMoney((tc.purchases||0)>0?Math.round(tc.spend/tc.purchases):0)}<br>ĐK: ${fmtMoney((tc.subscribes||0)>0?Math.round(tc.spend/tc.subscribes):0)}` : fmtMoney(tc.cpa);
+    let resultCell = fmtNum(tc.conversions), costCell = fmtMoney(tc.cpa);
+    if (tc.platform === 'facebook') {
+      const resultParts = [], costParts = [];
+      if ((tc.messages||0) > 0) { resultParts.push(`Tin nhắn: ${fmtNum(tc.messages)}`); costParts.push(`Tin nhắn: ${fmtMoney(Math.round(tc.spend/tc.messages))}`); }
+      if ((tc.facebook_leads||0) > 0) { resultParts.push(`Lead FB: ${fmtNum(tc.facebook_leads)}`); costParts.push(`Lead FB: ${fmtMoney(Math.round(tc.spend/tc.facebook_leads))}`); }
+      if (tc.result_label && !['Tin nhắn','Lead','Lượt mua','Đăng ký'].includes(tc.result_label)) { resultParts.push(`${escHtml(tc.result_label)}: ${fmtNum(tc.conversions||0)}`); costParts.push(`${escHtml(tc.result_label)}: ${fmtMoney(tc.cost_per_result||0)}`); }
+      if ((tc.purchases||0) > 0) {
+        resultParts.push(`Mua: ${fmtNum(tc.purchases)}`);
+        costParts.push(`Mua: ${fmtMoney(Math.round(tc.spend/tc.purchases))}`);
+      }
+      if ((tc.subscribes||0) > 0) {
+        resultParts.push(`Đăng ký: ${fmtNum(tc.subscribes)}`);
+        costParts.push(`ĐK: ${fmtMoney(Math.round(tc.spend/tc.subscribes))}`);
+      }
+      resultCell = resultParts.length ? resultParts.join('<br>') : 'Chưa có kết quả';
+      costCell = costParts.length ? costParts.join('<br>') : '—';
+    }
     html += `<tr><td class="mono text-dim">${i+1}</td><td><strong>${escHtml(tc.camp_name)}</strong></td><td>${pb} <span class="muted" style="font-size:12px">${escHtml(tc.account_label||'')}</span></td><td>${fmtNum(tc.impressions)}</td><td>${fmtNum(tc.clicks)}</td><td>${Number(tc.ctr).toFixed(2).replace('.',',')}%</td><td class="mono">${fmtMoney(tc.cpc)}</td><td class="mono">${fmtMoney(tc.spend)}</td><td>${resultCell}</td><td class="mono">${costCell}</td><td>${tc.leads} <span class="muted">(u:${tc.leads_unique})</span></td><td class="mono">${fmtMoney(tc.cpl)}</td></tr>`;
   });
   html += '</tbody></table>';

@@ -73,6 +73,10 @@ class DigestBuilder {
                         $lines[] = "     Conv: {$r['conversions']} · CPA: " . number_format($cpa, 0, ',', '.') . "đ"
                                  . " · Leads: {$r['leads']} (u:{$r['leads_unique']})";
                     } else {
+                        $resultLabel = $r['result_label'] ?: null;
+                        $resultCount = (int)($r['conversions'] ?? 0);
+                        $messages = (int)($r['messages'] ?? 0);
+                        $facebookLeads = (int)($r['facebook_leads'] ?? 0);
                         $purchases = (int)($r['purchases'] ?? 0);
                         $subscribes = (int)($r['subscribes'] ?? 0);
 
@@ -82,12 +86,22 @@ class DigestBuilder {
                                  . " · CTR: " . number_format($ctr, 2, ',', '.') . "%";
                         $lines[] = "     CPC: " . number_format($cpc, 0, ',', '.') . "đ"
                                  . " · Spend: " . number_format($r['spend'], 0, ',', '.') . "đ";
+                        $hasResult = false;
+                        if ($messages > 0) { $lines[] = "     Tin nhắn: {$messages} · Chi phí/tin nhắn: " . number_format(round($r['spend'] / $messages), 0, ',', '.') . "đ"; $hasResult = true; }
+                        if ($facebookLeads > 0) { $lines[] = "     Lead Facebook: {$facebookLeads} · Chi phí/lead FB: " . number_format(round($r['spend'] / $facebookLeads), 0, ',', '.') . "đ"; $hasResult = true; }
+                        if ($resultLabel && !in_array($resultLabel, ['Tin nhắn', 'Lead', 'Lượt mua', 'Đăng ký'], true) && $resultCount > 0) {
+                            $resultCost = round($r['spend'] / $resultCount);
+                            $lines[] = "     {$resultLabel}: {$resultCount} · Chi phí/K.quả: " . number_format($resultCost, 0, ',', '.') . "đ";
+                            $hasResult = true;
+                        }
                         if ($purchases > 0 || $subscribes > 0) {
                             $purchaseCost = $purchases > 0 ? round($r['spend'] / $purchases) : 0;
                             $subscribeCost = $subscribes > 0 ? round($r['spend'] / $subscribes) : 0;
-                            $lines[] = "     Lượt mua: {$purchases} · Chi phí/mua: " . number_format($purchaseCost, 0, ',', '.') . "đ";
-                            $lines[] = "     Đăng ký: {$subscribes} · Chi phí/đăng ký: " . number_format($subscribeCost, 0, ',', '.') . "đ";
-                        } else {
+                            if ($purchases > 0) $lines[] = "     Lượt mua: {$purchases} · Chi phí/mua: " . number_format($purchaseCost, 0, ',', '.') . "đ";
+                            if ($subscribes > 0) $lines[] = "     Đăng ký: {$subscribes} · Chi phí/đăng ký: " . number_format($subscribeCost, 0, ',', '.') . "đ";
+                            $hasResult = true;
+                        }
+                        if (!$hasResult) {
                             $lines[] = "     Kết quả: chưa có dữ liệu";
                         }
                     }
@@ -144,6 +158,7 @@ class DigestBuilder {
           SELECT s.campaign_id, s.credential_id AS cred_id, COALESCE(c.name, s.campaign_id) AS name, cr.platform,
                  SUM(s.spend) AS spend, SUM(s.impressions) AS impressions, SUM(s.clicks) AS clicks,
                  SUM(s.conversions) AS conversions, SUM(s.purchases) AS purchases, SUM(s.subscribes) AS subscribes,
+                 SUM(s.messages) AS messages, SUM(s.facebook_leads) AS facebook_leads,
                  MAX(s.result_label) AS result_label
           FROM ads_spend_cache s
           LEFT JOIN campaigns c ON c.credential_id = s.credential_id AND c.platform_campaign_id = s.campaign_id
@@ -162,6 +177,8 @@ class DigestBuilder {
             $r['conversions'] = (int) $r['conversions'];
             $r['purchases'] = (int) $r['purchases'];
             $r['subscribes'] = (int) $r['subscribes'];
+            $r['messages'] = (int) $r['messages'];
+            $r['facebook_leads'] = (int) $r['facebook_leads'];
 
             $lp = $db->prepare('SELECT dup_key FROM leads WHERE channel_id = ? AND platform_campaign_id = ? AND created_at BETWEEN ? AND ?');
             $lp->execute([$channel['id'], $r['campaign_id'], $start, $end]);

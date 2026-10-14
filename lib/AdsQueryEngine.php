@@ -100,6 +100,7 @@ class AdsQueryEngine {
                    SUM(s.spend) AS spend, SUM(s.impressions) AS impressions,
                    SUM(s.clicks) AS clicks, SUM(s.conversions) AS conversions,
                    SUM(s.purchases) AS purchases, SUM(s.subscribes) AS subscribes,
+                   SUM(s.messages) AS messages, SUM(s.facebook_leads) AS facebook_leads,
                    MAX(s.result_label) AS result_label
                    FROM ads_spend_cache s
                    LEFT JOIN campaigns camp ON camp.credential_id = s.credential_id AND camp.platform_campaign_id = s.campaign_id
@@ -122,6 +123,8 @@ class AdsQueryEngine {
             $c['conversions'] = (int)$c['conversions'];
             $c['purchases'] = (int)$c['purchases'];
             $c['subscribes'] = (int)$c['subscribes'];
+            $c['messages'] = (int)$c['messages'];
+            $c['facebook_leads'] = (int)$c['facebook_leads'];
             $c['ctr'] = $c['impressions'] > 0 ? round(($c['clicks'] / $c['impressions']) * 100, 2) : 0;
             $c['cpc'] = $c['clicks'] > 0 ? round($c['spend'] / $c['clicks']) : 0;
         }
@@ -241,7 +244,7 @@ class AdsQueryEngine {
 
         [$startDate, $endDate, $label] = $this->resolveRange($params);
 
-        $sq = $this->db->prepare("SELECT SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(conversions) AS conversions, SUM(purchases) AS purchases, SUM(subscribes) AS subscribes FROM ads_spend_cache WHERE credential_id = ? AND campaign_id = ? AND spend_date BETWEEN ? AND ?");
+        $sq = $this->db->prepare("SELECT SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(conversions) AS conversions, SUM(purchases) AS purchases, SUM(subscribes) AS subscribes, SUM(messages) AS messages, SUM(facebook_leads) AS facebook_leads FROM ads_spend_cache WHERE credential_id = ? AND campaign_id = ? AND spend_date BETWEEN ? AND ?");
         $sq->execute([$camp['credential_id'], $camp['platform_campaign_id'], $startDate, $endDate]);
         $stats = $sq->fetch();
 
@@ -260,6 +263,8 @@ class AdsQueryEngine {
             'conversions' => $conv,
             'purchases' => (int)($stats['purchases'] ?? 0),
             'subscribes' => (int)($stats['subscribes'] ?? 0),
+            'messages' => (int)($stats['messages'] ?? 0),
+            'facebook_leads' => (int)($stats['facebook_leads'] ?? 0),
             'ctr' => $impr > 0 ? round(($clicks / $impr) * 100, 2) : 0,
             'cpc' => $clicks > 0 ? round($spend / $clicks) : 0,
             'cpa' => $conv > 0 ? round($spend / $conv) : 0,
