@@ -88,6 +88,17 @@ if (!$isAuthed) {
 if (isset($_GET['api'])) {
     header('Content-Type: application/json; charset=utf-8');
 
+    // Scope toàn bộ truy vấn theo group đang chọn. Chỉ cho phép group đã gán cho partner.
+    $requestedGroupId = (int)($_GET['group_id'] ?? 0);
+    if ($requestedGroupId > 0) {
+        if (!in_array($requestedGroupId, $groupIds, true)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Group không thuộc partner này'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $groupIds = [$requestedGroupId];
+    }
+
     $exRate = CurrencyHelper::getRate($db);
     $currencyMap = [];
     foreach ($db->query('SELECT id, currency FROM ads_credentials')->fetchAll() as $_cr) {
@@ -498,6 +509,7 @@ function switchTopTab(t) { currentTopTab = t; document.getElementById('tabSpendB
 
 async function loadData() {
   let url = `?slug=${SLUG}&api=1&range=${currentRange}`;
+  if (currentScope !== 'all') url += `&group_id=${encodeURIComponent(currentScope)}`;
   if (customFrom && customTo) url += `&from=${customFrom}&to=${customTo}`;
   const r = await fetch(url, {credentials:'same-origin'});
   const d = await r.json();
