@@ -86,10 +86,11 @@ class FacebookAdsClient {
                 [$resultCount, $resultLabel] = self::pickResult($r['actions'] ?? []);
                 $purchases = self::pickActionCount($r['actions'] ?? [], [
                     'omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase', 'onsite_conversion.purchase',
-                ]);
+                ], ['purchase']);
                 $subscribes = self::pickActionCount($r['actions'] ?? [], [
-                    'offsite_conversion.fb_pixel_subscribe', 'omni_subscribe', 'subscribe',
-                ]);
+                    'offsite_conversion.fb_pixel_subscribe', 'onsite_conversion.subscribe', 'omni_subscribe', 'subscribe',
+                    'offsite_conversion.fb_pixel_subscription', 'subscription',
+                ], ['subscribe', 'subscription']);
                 $rows[] = [
                     'campaign_id' => $r['campaign_id'] ?? '',
                     'campaign_name' => $r['campaign_name'] ?? '',
@@ -103,6 +104,11 @@ class FacebookAdsClient {
                     'result_label' => $resultLabel,
                     'purchases' => $purchases,
                     'subscribes' => $subscribes,
+                    // Chỉ trả về trong preview sync để chẩn đoán tên action mới từ Meta; không lưu DB.
+                    'action_types' => array_values(array_map(fn($a) => [
+                        'type' => (string)($a['action_type'] ?? ''),
+                        'value' => (int)($a['value'] ?? 0),
+                    ], $r['actions'] ?? [])),
                 ];
             }
             $url = $data['paging']['next'] ?? null;
@@ -144,13 +150,20 @@ class FacebookAdsClient {
     }
 
     /** Lấy một action theo thứ tự ưu tiên; không cộng các alias để tránh đếm trùng cùng một event. */
-    private static function pickActionCount(array $actions, array $types): int {
+    private static function pickActionCount(array $actions, array $types, array $keywords = []): int {
         $byType = [];
         foreach ($actions as $a) {
             $byType[$a['action_type'] ?? ''] = (int)($a['value'] ?? 0);
         }
         foreach ($types as $type) {
             if (!empty($byType[$type])) return $byType[$type];
+        }
+        // Meta có thể bổ sung prefix/namespace mới. Fallback theo tên event nhưng vẫn chỉ
+        // lấy một action đầu tiên để không cộng trùng các alias của cùng conversion.
+        foreach ($byType as $type => $value) {
+            foreach ($keywords as $keyword) {
+                if ($value > 0 && stripos($type, $keyword) !== false) return $value;
+            }
         }
         return 0;
     }
