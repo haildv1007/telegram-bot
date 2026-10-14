@@ -55,6 +55,7 @@ class FacebookAdsClient {
     ];
 
     public function syncSpend(string $from, string $to, ?string $campaignId = null): array {
+        $customActions = $this->loadCustomConversionActions();
         $params = [
             'access_token' => $this->token(),
             'level' => 'campaign',
@@ -86,10 +87,12 @@ class FacebookAdsClient {
                 [$resultCount, $resultLabel] = self::pickResult($r['actions'] ?? []);
                 $purchases = self::pickActionCount($r['actions'] ?? [], [
                     'omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase', 'onsite_conversion.purchase',
+                    ...$customActions['purchase'],
                 ], ['purchase']);
                 $subscribes = self::pickActionCount($r['actions'] ?? [], [
                     'offsite_conversion.fb_pixel_subscribe', 'onsite_conversion.subscribe', 'omni_subscribe', 'subscribe',
                     'offsite_conversion.fb_pixel_subscription', 'subscription',
+                    ...$customActions['subscribe'],
                 ], ['subscribe', 'subscription']);
                 $rows[] = [
                     'campaign_id' => $r['campaign_id'] ?? '',
@@ -109,6 +112,7 @@ class FacebookAdsClient {
                         'type' => (string)($a['action_type'] ?? ''),
                         'value' => (int)($a['value'] ?? 0),
                     ], $r['actions'] ?? [])),
+                    'mapped_custom_actions' => $customActions,
                 ];
             }
             $url = $data['paging']['next'] ?? null;
@@ -166,6 +170,51 @@ class FacebookAdsClient {
             }
         }
         return 0;
+    }
+
+    /**
+     * Meta trả custom conversion trong insights dưới dạng offsite_conversion.custom.<id>.
+     * Đọc tên + custom_event_type để biết ID nào là Subscribe/Purchase.
+     */
+    private function loadCustomConversionActions(): array {
+        $mapped = ['subscribe' => [], 'purchase' => []];
+        $url = 'https://graph.facebook.com/' . self::API_VERSION . '/' . $this->accountPath()
+             . '/customconversions?fields=id,name,custom_event_type&limit=500&access_token=' . urlencode($this->token());
+
+        try {
+            while ($url) {
+                $data = self::get($url);
+                foreach ($data['data'] ?? [] as $conversion) {
+                    $id = preg_replace('/\D/', '', (string)($conversion['id'] ?? ''));
+                    if ($id === '') continue;
+
+                    $name = mb_strtolower((string)($conversion['name'] ?? ''));
+                    $eventType = strtoupper((string)($conversion['custom_event_type'] ?? ''));
+                    $actionType = 'offsite_conversion.custom.' . $id;
+
+                    if ($eventType === 'SUBSCRIBE'
+                        || str_contains($name, 'subscribe')
+                        || str_contains($name, 'subscription')
+                        || str_contains($name, 'đăng ký')
+                        || str_contains($name, 'dang ky')) {
+                        $mapped['subscribe'][] = $actionType;
+                    }
+                    if ($eventType === 'PURCHASE'
+                        || str_contains($name, 'purchase')
+                        || str_contains($name, 'lượt mua')
+                        || str_contains($name, 'luot mua')) {
+                        $mapped['purchase'][] = $actionType;
+                    }
+                }
+                $url = $data['paging']['next'] ?? null;
+            }
+        } catch (Throwable $e) {
+            // Không chặn đồng bộ spend nếu token không có quyền đọc custom conversions.
+        }
+
+        $mapped['subscribe'] = array_values(array_unique($mapped['subscribe']));
+        $mapped['purchase'] = array_values(array_unique($mapped['purchase']));
+        return $mapped;
     }
 
     public function testConnection(): array {
