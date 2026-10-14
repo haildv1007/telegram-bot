@@ -176,10 +176,10 @@ class ReportBuilder {
                     $lines[] = "   Leads: {$leads} (u: {$leadsU}) · CPL: " . number_format($campCpl, 0, ',', '.') . "đ";
                 } else {
                     // Facebook
-                    $resultLabel = $r['result_label'] ?: null;
-                    $resultCount = (int)$r['conversions'];
+                    $purchases = (int)($r['purchases'] ?? 0);
+                    $subscribes = (int)($r['subscribes'] ?? 0);
 
-                    $lines[] = "▸ " . $r['camp_name'] . ($resultLabel ? " [{$resultLabel}]" : "");
+                    $lines[] = "▸ " . $r['camp_name'];
                     $lines[] = "   Impr: " . number_format((int)$r['impressions'], 0, ',', '.')
                              . " · Clicks: " . number_format((int)$r['clicks'], 0, ',', '.')
                              . " · CTR: " . number_format($ctr, 2, ',', '.') . "%"
@@ -188,9 +188,11 @@ class ReportBuilder {
                     $lines[] = "   CPC: " . number_format($cpc, 0, ',', '.') . "đ"
                              . " · Spend: " . number_format((float)$r['spend'], 0, ',', '.') . "đ";
 
-                    if ($resultLabel && $resultCount > 0) {
-                        $costPerResult = round((float)$r['spend'] / $resultCount);
-                        $lines[] = "   Kết quả: {$resultCount} ({$resultLabel}) · Chi phí/K.quả: " . number_format($costPerResult, 0, ',', '.') . "đ";
+                    if ($purchases > 0 || $subscribes > 0) {
+                        $purchaseCost = $purchases > 0 ? round((float)$r['spend'] / $purchases) : 0;
+                        $subscribeCost = $subscribes > 0 ? round((float)$r['spend'] / $subscribes) : 0;
+                        $lines[] = "   Lượt mua: {$purchases} · Chi phí/mua: " . number_format($purchaseCost, 0, ',', '.') . "đ";
+                        $lines[] = "   Đăng ký: {$subscribes} · Chi phí/đăng ký: " . number_format($subscribeCost, 0, ',', '.') . "đ";
                     } else {
                         $lines[] = "   Kết quả: chưa có dữ liệu";
                     }
@@ -234,22 +236,19 @@ class ReportBuilder {
             $lines[] = "— Tổng ngân sách" . ($isProgress ? " (tạm)" : "") . ": " . number_format($spendTotal, 0, ',', '.') . "đ"
                      . ($spendSource === 'ads_api' ? ' [Ads]' : ' [manual]');
 
-            $resultGroups = []; // label => ['spend'=>, 'count'=>]
+            $purchaseTotal = 0; $subscribeTotal = 0;
             foreach ($groups as $g) {
                 foreach ($g['rows'] as $r) {
-                    $label = $r['result_label'] ?? null;
-                    $cnt = (int)$r['conversions'];
-                    if (!$label || $cnt <= 0) continue;
-                    if (!isset($resultGroups[$label])) $resultGroups[$label] = ['spend' => 0.0, 'count' => 0];
-                    $resultGroups[$label]['spend'] += (float)$r['spend'];
-                    $resultGroups[$label]['count'] += $cnt;
+                    $purchaseTotal += (int)($r['purchases'] ?? 0);
+                    $subscribeTotal += (int)($r['subscribes'] ?? 0);
                 }
             }
-            foreach ($resultGroups as $label => $d) {
-                $avgCost = $d['count'] > 0 ? round($d['spend'] / $d['count']) : 0;
-                $lines[] = "— Kết quả ({$label}): {$d['count']} · Chi phí/K.quả TB: " . number_format($avgCost, 0, ',', '.') . "đ";
-            }
-            if (empty($resultGroups)) {
+            if ($purchaseTotal > 0 || $subscribeTotal > 0) {
+                $purchaseCost = $purchaseTotal > 0 ? round($spendTotal / $purchaseTotal) : 0;
+                $subscribeCost = $subscribeTotal > 0 ? round($spendTotal / $subscribeTotal) : 0;
+                $lines[] = "— Lượt mua: {$purchaseTotal} · Chi phí/mua: " . number_format($purchaseCost, 0, ',', '.') . "đ";
+                $lines[] = "— Đăng ký: {$subscribeTotal} · Chi phí/đăng ký: " . number_format($subscribeCost, 0, ',', '.') . "đ";
+            } else {
                 $lines[] = "— Chưa có dữ liệu kết quả (camp chưa có action nào được ghi nhận).";
             }
         }

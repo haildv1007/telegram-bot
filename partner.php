@@ -140,7 +140,7 @@ if (isset($_GET['api'])) {
         if (empty($credIds) && !empty($ch['credential_id'])) $credIds = [(int)$ch['credential_id']];
 
         $chSpend = 0.0;
-        $chConv = 0;
+        $chConv = 0; $chPurchases = 0; $chSubscribes = 0;
         if (!empty($credIds)) {
             $cph = implode(',', array_fill(0, count($credIds), '?'));
             $params = array_merge($credIds, [$startDate, $endDate]);
@@ -153,12 +153,14 @@ if (isset($_GET['api'])) {
                     $params = array_merge($params, $campIds);
                 }
             }
-            $sq = $db->prepare("SELECT credential_id, SUM(spend) AS s, SUM(conversions) AS conv FROM ads_spend_cache WHERE credential_id IN ($cph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
+            $sq = $db->prepare("SELECT credential_id, SUM(spend) AS s, SUM(conversions) AS conv, SUM(purchases) AS purchases, SUM(subscribes) AS subscribes FROM ads_spend_cache WHERE credential_id IN ($cph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
             $sq->execute($params);
             foreach ($sq as $_r) {
                 $converted = (($currencyMap[(int)$_r['credential_id']] ?? 'VND') === 'USD') ? (float)$_r['s'] * $exRate : (float)$_r['s'];
                 $chSpend += $converted;
                 $chConv += (int)$_r['conv'];
+                $chPurchases += (int)$_r['purchases'];
+                $chSubscribes += (int)$_r['subscribes'];
             }
         }
 
@@ -175,6 +177,7 @@ if (isset($_GET['api'])) {
             'leads' => $chTotal, 'leads_unique' => $chUnique, 'spend' => $chSpend,
             'cpl' => $chUnique > 0 ? round($chSpend / $chUnique) : 0,
             'conversions' => $chConv, 'cpa' => $chConv > 0 ? round($chSpend / $chConv) : 0,
+            'purchases' => $chPurchases, 'subscribes' => $chSubscribes,
         ];
     }
 
@@ -208,7 +211,8 @@ if (isset($_GET['api'])) {
             SELECT s.credential_id, s.campaign_id, COALESCE(camp.name, s.campaign_id) AS camp_name,
                 cr.platform, cr.account_label,
                 SUM(s.spend) AS spend, SUM(s.impressions) AS impressions, SUM(s.clicks) AS clicks,
-                SUM(s.conversions) AS conversions, SUM(s.reach) AS reach, AVG(s.frequency) AS frequency,
+                SUM(s.conversions) AS conversions, SUM(s.purchases) AS purchases, SUM(s.subscribes) AS subscribes,
+                SUM(s.reach) AS reach, AVG(s.frequency) AS frequency,
                 MAX(s.result_label) AS result_label
             FROM ads_spend_cache s
             LEFT JOIN campaigns camp ON camp.credential_id = s.credential_id AND camp.platform_campaign_id = s.campaign_id
@@ -229,6 +233,8 @@ if (isset($_GET['api'])) {
             $tc['impressions'] = (int)$tc['impressions'];
             $tc['clicks'] = (int)$tc['clicks'];
             $tc['conversions'] = (int)$tc['conversions'];
+            $tc['purchases'] = (int)$tc['purchases'];
+            $tc['subscribes'] = (int)$tc['subscribes'];
             $tc['reach'] = (int)$tc['reach'];
             $tc['frequency'] = (float)$tc['frequency'];
             $tc['cpc'] = $tc['clicks'] > 0 ? round($tc['spend'] / $tc['clicks']) : 0;
@@ -530,11 +536,11 @@ async function loadData() {
   renderTopTable(campaigns, currentTopTab);
 
   // Channels overview
-  let coHtml = '<table class="table"><thead><tr><th>Channel</th><th>Ads</th><th>Leads</th><th>Spend</th><th>CPL</th><th>Conv</th><th>CPA</th></tr></thead><tbody>';
-  if (chOverview.length === 0) coHtml += '<tr><td colspan="7" class="text-muted" style="text-align:center">Chưa có dữ liệu</td></tr>';
+  let coHtml = '<table class="table"><thead><tr><th>Channel</th><th>Ads</th><th>Leads</th><th>Spend</th><th>CPL</th><th>Conv</th><th>CPA</th><th>Mua</th><th>Đăng ký</th></tr></thead><tbody>';
+  if (chOverview.length === 0) coHtml += '<tr><td colspan="9" class="text-muted" style="text-align:center">Chưa có dữ liệu</td></tr>';
   chOverview.forEach(c => {
     const pb = c.cred_platforms ? c.cred_platforms.split(',').map(p => `<span class="badge ${p==='google'?'badge-accent':'badge-warn'}">${p.substring(0,2).toUpperCase()}</span>`).join(' ') : '—';
-    coHtml += `<tr><td><strong>${escHtml(c.name)}</strong></td><td>${pb}</td><td>${c.leads} <span class="muted">(u: ${c.leads_unique})</span></td><td class="mono">${fmtMoney(c.spend)}</td><td class="mono">${fmtMoney(c.cpl)}</td><td>${c.conversions||0}</td><td class="mono">${fmtMoney(c.cpa||0)}</td></tr>`;
+    coHtml += `<tr><td><strong>${escHtml(c.name)}</strong></td><td>${pb}</td><td>${c.leads} <span class="muted">(u: ${c.leads_unique})</span></td><td class="mono">${fmtMoney(c.spend)}</td><td class="mono">${fmtMoney(c.cpl)}</td><td>${c.conversions||0}</td><td class="mono">${fmtMoney(c.cpa||0)}</td><td>${c.purchases||0}</td><td>${c.subscribes||0}</td></tr>`;
   });
   coHtml += '</tbody></table>';
   document.getElementById('channelsOverviewOut').innerHTML = coHtml;
@@ -555,10 +561,12 @@ function renderTopTable(campaigns, tab) {
 
   if (list.length === 0) { document.getElementById('topCampaignOut').innerHTML = '<div class="text-muted" style="text-align:center;padding:20px">Chưa có dữ liệu.</div>'; return; }
 
-  let html = '<table class="table"><thead><tr><th>#</th><th>Campaign</th><th>TKQC</th><th>Impr</th><th>Clicks</th><th>CTR</th><th>CPC</th><th>Spend</th><th>Conv</th><th>CPA</th><th>Leads</th><th>CPL</th></tr></thead><tbody>';
+  let html = '<table class="table"><thead><tr><th>#</th><th>Campaign</th><th>TKQC</th><th>Impr</th><th>Clicks</th><th>CTR</th><th>CPC</th><th>Spend</th><th>Kết quả</th><th>Chi phí/KQ</th><th>Leads</th><th>CPL</th></tr></thead><tbody>';
   list.forEach((tc, i) => {
     const pb = `<span class="badge ${tc.platform==='google'?'badge-accent':'badge-warn'}">${(tc.platform||'').substring(0,2).toUpperCase()}</span>`;
-    html += `<tr><td class="mono text-dim">${i+1}</td><td><strong>${escHtml(tc.camp_name)}</strong></td><td>${pb} <span class="muted" style="font-size:12px">${escHtml(tc.account_label||'')}</span></td><td>${fmtNum(tc.impressions)}</td><td>${fmtNum(tc.clicks)}</td><td>${Number(tc.ctr).toFixed(2).replace('.',',')}%</td><td class="mono">${fmtMoney(tc.cpc)}</td><td class="mono">${fmtMoney(tc.spend)}</td><td>${fmtNum(tc.conversions)}</td><td class="mono">${fmtMoney(tc.cpa)}</td><td>${tc.leads} <span class="muted">(u:${tc.leads_unique})</span></td><td class="mono">${fmtMoney(tc.cpl)}</td></tr>`;
+    const resultCell = tc.platform === 'facebook' ? `Mua: ${fmtNum(tc.purchases||0)}<br>Đăng ký: ${fmtNum(tc.subscribes||0)}` : fmtNum(tc.conversions);
+    const costCell = tc.platform === 'facebook' ? `Mua: ${fmtMoney((tc.purchases||0)>0?Math.round(tc.spend/tc.purchases):0)}<br>ĐK: ${fmtMoney((tc.subscribes||0)>0?Math.round(tc.spend/tc.subscribes):0)}` : fmtMoney(tc.cpa);
+    html += `<tr><td class="mono text-dim">${i+1}</td><td><strong>${escHtml(tc.camp_name)}</strong></td><td>${pb} <span class="muted" style="font-size:12px">${escHtml(tc.account_label||'')}</span></td><td>${fmtNum(tc.impressions)}</td><td>${fmtNum(tc.clicks)}</td><td>${Number(tc.ctr).toFixed(2).replace('.',',')}%</td><td class="mono">${fmtMoney(tc.cpc)}</td><td class="mono">${fmtMoney(tc.spend)}</td><td>${resultCell}</td><td class="mono">${costCell}</td><td>${tc.leads} <span class="muted">(u:${tc.leads_unique})</span></td><td class="mono">${fmtMoney(tc.cpl)}</td></tr>`;
   });
   html += '</tbody></table>';
   document.getElementById('topCampaignOut').innerHTML = html;

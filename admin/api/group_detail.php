@@ -56,7 +56,8 @@ function campaign_rows(PDO $db, array $channel, string $start, string $end): arr
     $q = $db->prepare("
       SELECT s.credential_id AS cred_id, s.campaign_id, COALESCE(c.name, s.campaign_id) AS name, cr.platform, cr.account_label,
              SUM(s.spend) AS spend, SUM(s.impressions) AS impressions, SUM(s.clicks) AS clicks,
-             SUM(s.conversions) AS conversions, SUM(s.reach) AS reach, AVG(s.frequency) AS frequency,
+             SUM(s.conversions) AS conversions, SUM(s.purchases) AS purchases, SUM(s.subscribes) AS subscribes,
+             SUM(s.reach) AS reach, AVG(s.frequency) AS frequency,
              MAX(s.result_label) AS result_label
       FROM ads_spend_cache s
       LEFT JOIN campaigns c ON c.credential_id = s.credential_id AND c.platform_campaign_id = s.campaign_id
@@ -75,6 +76,8 @@ function campaign_rows(PDO $db, array $channel, string $start, string $end): arr
         $r['impressions'] = (int)$r['impressions'];
         $r['clicks'] = (int)$r['clicks'];
         $r['conversions'] = (int)$r['conversions'];
+        $r['purchases'] = (int)$r['purchases'];
+        $r['subscribes'] = (int)$r['subscribes'];
         $r['reach'] = (int)$r['reach'];
         $r['frequency'] = (float)$r['frequency'];
         $r['ctr'] = $r['impressions'] > 0 ? ($r['clicks'] / $r['impressions']) * 100 : 0;

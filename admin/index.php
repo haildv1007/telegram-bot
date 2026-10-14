@@ -311,10 +311,11 @@ function renderTopCampaignTable(campaigns, tab) {
       convCell = fmtNum(tc.conversions);
       cpaCell = fmtMoney(tc.cpa);
     } else {
-      convCell = fmtNum(tc.conversions) +
-        (tc.result_label ? '<div class="muted" style="font-size:11px">' + escapeHtmlG(tc.result_label) + '</div>' : '') +
+      convCell = '<div>Mua: ' + fmtNum(tc.purchases||0) + '</div>' +
+        '<div>Đăng ký: ' + fmtNum(tc.subscribes||0) + '</div>' +
         (tc.reach ? '<div class="muted" style="font-size:11px">Reach: ' + fmtNum(tc.reach) + ' · TS: ' + Number(tc.frequency).toFixed(2).replace('.',',') + '</div>' : '');
-      cpaCell = fmtMoney(tc.cost_per_result);
+      cpaCell = '<div>Mua: ' + fmtMoney((tc.purchases||0) > 0 ? Math.round(tc.spend/tc.purchases) : 0) + '</div>' +
+        '<div>ĐK: ' + fmtMoney((tc.subscribes||0) > 0 ? Math.round(tc.spend/tc.subscribes) : 0) + '</div>';
     }
     html += '<tr>' +
       '<td class="mono text-dim">' + (i+1) + '</td>' +
@@ -356,11 +357,11 @@ function renderChannelsOverviewTable(rows, rangeLabel) {
   });
 
   let html = '<table class="table"><thead><tr>' +
-    '<th>Channel</th><th>Ads</th><th>Lead</th><th>Spend</th><th>CPL</th><th>Conv</th><th>CPA</th><th>Lịch báo cáo</th><th>Trạng thái</th>' +
+    '<th>Channel</th><th>Ads</th><th>Lead</th><th>Spend</th><th>CPL</th><th>Conv</th><th>CPA</th><th>Mua</th><th>Đăng ký</th><th>Lịch báo cáo</th><th>Trạng thái</th>' +
     '</tr></thead><tbody>';
 
   if (rows.length === 0) {
-    html += '<tr><td colspan="9" class="text-muted" style="text-align:center;padding:24px;">Chưa có channel nào.</td></tr>';
+    html += '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:24px;">Chưa có channel nào.</td></tr>';
   }
 
   function platformBadges(csv) {
@@ -372,8 +373,8 @@ function renderChannelsOverviewTable(rows, rangeLabel) {
   }
 
   Object.values(groups).forEach(g => {
-    let gl=0, gu=0, gs=0, gc=0; let anyActive = false;
-    g.members.forEach(m => { gl+=m.leads; gu+=m.leads_unique; gs+=m.spend; gc+=(m.conversions||0); if (m.active) anyActive = true; });
+    let gl=0, gu=0, gs=0, gc=0, gp=0, gsub=0; let anyActive = false;
+    g.members.forEach(m => { gl+=m.leads; gu+=m.leads_unique; gs+=m.spend; gc+=(m.conversions||0); gp+=(m.purchases||0); gsub+=(m.subscribes||0); if (m.active) anyActive = true; });
     const gcpl = gu > 0 ? Math.round(gs/gu) : 0;
     const gcpa = gc > 0 ? Math.round(gs/gc) : 0;
     html += '<tr style="background:var(--surface-2)"><td><strong>' + escapeHtmlG(g.name) + '</strong> <span class="badge badge-accent" style="margin-left:6px">Nhóm ×' + g.members.length + '</span></td>' +
@@ -381,7 +382,7 @@ function renderChannelsOverviewTable(rows, rangeLabel) {
       '<td>' + gl + ' <span class="muted">(u: ' + gu + ')</span></td>' +
       '<td class="mono">' + fmtMoney(gs) + '</td>' +
       '<td class="mono">' + fmtMoney(gcpl) + '</td>' +
-      '<td>' + gc + '</td><td class="mono">' + fmtMoney(gcpa) + '</td>' +
+      '<td>' + gc + '</td><td class="mono">' + fmtMoney(gcpa) + '</td><td>' + gp + '</td><td>' + gsub + '</td>' +
       '<td class="text-dim">—</td><td>' + statusBadge(anyActive) + '</td></tr>';
     g.members.forEach(m => {
       html += '<tr><td style="padding-left:32px"><span class="text-dim">↳</span> ' + escapeHtmlG(m.name) + '<div class="mono text-dim" style="font-size:11px">#' + m.id + '</div></td>' +
@@ -389,7 +390,7 @@ function renderChannelsOverviewTable(rows, rangeLabel) {
         '<td>' + m.leads + ' <span class="muted">(u: ' + m.leads_unique + ')</span></td>' +
         '<td class="mono">' + fmtMoney(m.spend) + '</td>' +
         '<td class="mono">' + fmtMoney(m.cpl) + '</td>' +
-        '<td>' + (m.conversions||0) + '</td><td class="mono">' + fmtMoney(m.cpa||0) + '</td>' +
+        '<td>' + (m.conversions||0) + '</td><td class="mono">' + fmtMoney(m.cpa||0) + '</td><td>' + (m.purchases||0) + '</td><td>' + (m.subscribes||0) + '</td>' +
         '<td class="mono">' + escapeHtmlG(m.schedules || '—') + '</td>' +
         '<td>' + statusBadge(m.active) + '</td></tr>';
     });
@@ -401,7 +402,7 @@ function renderChannelsOverviewTable(rows, rangeLabel) {
       '<td>' + c.leads + ' <span class="muted">(u: ' + c.leads_unique + ')</span></td>' +
       '<td class="mono">' + fmtMoney(c.spend) + '</td>' +
       '<td class="mono">' + fmtMoney(c.cpl) + '</td>' +
-      '<td>' + (c.conversions||0) + '</td><td class="mono">' + fmtMoney(c.cpa||0) + '</td>' +
+      '<td>' + (c.conversions||0) + '</td><td class="mono">' + fmtMoney(c.cpa||0) + '</td><td>' + (c.purchases||0) + '</td><td>' + (c.subscribes||0) + '</td>' +
       '<td class="mono">' + escapeHtmlG(c.schedules || '—') + '</td>' +
       '<td>' + statusBadge(c.active) + '</td></tr>';
   });
@@ -428,7 +429,7 @@ function renderGroupBreakdown(data) {
         const platformBadge = '<span class="badge ' + (c.platform === 'google' ? 'badge-accent' : 'badge-warn') + '">' + (c.platform||'').substring(0,2).toUpperCase() + '</span>';
         const convCell = c.platform === 'google'
           ? c.conversions + ' <span class="muted">(CPA ' + fmtMoney(c.cpa) + ')</span>'
-          : c.conversions + (c.result_label ? ' <span class="muted">(' + escapeHtmlG(c.result_label) + ')</span>' : '');
+          : 'Mua: ' + (c.purchases||0) + ' · ĐK: ' + (c.subscribes||0);
         html += '<tr>' +
           '<td><strong>' + escapeHtmlG(c.name) + '</strong></td>' +
           '<td>' + platformBadge + ' <span class="muted" style="font-size:12px">' + escapeHtmlG(c.account_label||'') + '</span></td>' +

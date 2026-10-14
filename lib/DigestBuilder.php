@@ -73,18 +73,20 @@ class DigestBuilder {
                         $lines[] = "     Conv: {$r['conversions']} · CPA: " . number_format($cpa, 0, ',', '.') . "đ"
                                  . " · Leads: {$r['leads']} (u:{$r['leads_unique']})";
                     } else {
-                        $resultLabel = $r['result_label'] ?: null;
-                        $resultCount = $r['conversions'];
-                        $costPerResult = ($resultLabel && $resultCount > 0) ? round($r['spend'] / $resultCount) : 0;
+                        $purchases = (int)($r['purchases'] ?? 0);
+                        $subscribes = (int)($r['subscribes'] ?? 0);
 
-                        $lines[] = "  ▸ " . $r['name'] . ($resultLabel ? " [{$resultLabel}]" : "");
+                        $lines[] = "  ▸ " . $r['name'];
                         $lines[] = "     Impr: " . number_format($r['impressions'], 0, ',', '.')
                                  . " · Clicks: " . number_format($r['clicks'], 0, ',', '.')
                                  . " · CTR: " . number_format($ctr, 2, ',', '.') . "%";
                         $lines[] = "     CPC: " . number_format($cpc, 0, ',', '.') . "đ"
                                  . " · Spend: " . number_format($r['spend'], 0, ',', '.') . "đ";
-                        if ($resultLabel && $resultCount > 0) {
-                            $lines[] = "     Kết quả: {$resultCount} ({$resultLabel}) · Chi phí/K.quả: " . number_format($costPerResult, 0, ',', '.') . "đ";
+                        if ($purchases > 0 || $subscribes > 0) {
+                            $purchaseCost = $purchases > 0 ? round($r['spend'] / $purchases) : 0;
+                            $subscribeCost = $subscribes > 0 ? round($r['spend'] / $subscribes) : 0;
+                            $lines[] = "     Lượt mua: {$purchases} · Chi phí/mua: " . number_format($purchaseCost, 0, ',', '.') . "đ";
+                            $lines[] = "     Đăng ký: {$subscribes} · Chi phí/đăng ký: " . number_format($subscribeCost, 0, ',', '.') . "đ";
                         } else {
                             $lines[] = "     Kết quả: chưa có dữ liệu";
                         }
@@ -141,7 +143,8 @@ class DigestBuilder {
         $q = $db->prepare("
           SELECT s.campaign_id, s.credential_id AS cred_id, COALESCE(c.name, s.campaign_id) AS name, cr.platform,
                  SUM(s.spend) AS spend, SUM(s.impressions) AS impressions, SUM(s.clicks) AS clicks,
-                 SUM(s.conversions) AS conversions, MAX(s.result_label) AS result_label
+                 SUM(s.conversions) AS conversions, SUM(s.purchases) AS purchases, SUM(s.subscribes) AS subscribes,
+                 MAX(s.result_label) AS result_label
           FROM ads_spend_cache s
           LEFT JOIN campaigns c ON c.credential_id = s.credential_id AND c.platform_campaign_id = s.campaign_id
           LEFT JOIN ads_credentials cr ON cr.id = s.credential_id
@@ -157,6 +160,8 @@ class DigestBuilder {
             $r['impressions'] = (int) $r['impressions'];
             $r['clicks'] = (int) $r['clicks'];
             $r['conversions'] = (int) $r['conversions'];
+            $r['purchases'] = (int) $r['purchases'];
+            $r['subscribes'] = (int) $r['subscribes'];
 
             $lp = $db->prepare('SELECT dup_key FROM leads WHERE channel_id = ? AND platform_campaign_id = ? AND created_at BETWEEN ? AND ?');
             $lp->execute([$channel['id'], $r['campaign_id'], $start, $end]);

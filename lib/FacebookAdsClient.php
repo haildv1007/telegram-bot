@@ -43,6 +43,9 @@ class FacebookAdsClient {
         'lead'                                                 => 'Lead',
         'onsite_conversion.lead_grouped'                       => 'Lead',
         'offsite_conversion.fb_pixel_lead'                     => 'Lead',
+        'offsite_conversion.fb_pixel_subscribe'                => 'Đăng ký',
+        'omni_subscribe'                                       => 'Đăng ký',
+        'subscribe'                                            => 'Đăng ký',
         'omni_purchase'                                        => 'Lượt mua',
         'purchase'                                             => 'Lượt mua',
         'offsite_conversion.fb_pixel_purchase'                 => 'Lượt mua',
@@ -81,6 +84,12 @@ class FacebookAdsClient {
 
             foreach ($data['data'] ?? [] as $r) {
                 [$resultCount, $resultLabel] = self::pickResult($r['actions'] ?? []);
+                $purchases = self::pickActionCount($r['actions'] ?? [], [
+                    'omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase', 'onsite_conversion.purchase',
+                ]);
+                $subscribes = self::pickActionCount($r['actions'] ?? [], [
+                    'offsite_conversion.fb_pixel_subscribe', 'omni_subscribe', 'subscribe',
+                ]);
                 $rows[] = [
                     'campaign_id' => $r['campaign_id'] ?? '',
                     'campaign_name' => $r['campaign_name'] ?? '',
@@ -92,6 +101,8 @@ class FacebookAdsClient {
                     'frequency' => (float)($r['frequency'] ?? 0),
                     'result_count' => $resultCount,
                     'result_label' => $resultLabel,
+                    'purchases' => $purchases,
+                    'subscribes' => $subscribes,
                 ];
             }
             $url = $data['paging']['next'] ?? null;
@@ -99,16 +110,17 @@ class FacebookAdsClient {
 
         // Upsert cache
         $up = $this->db->prepare('
-          INSERT INTO ads_spend_cache (credential_id, campaign_id, spend_date, spend, impressions, clicks, conversions, reach, frequency, result_label)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO ads_spend_cache (credential_id, campaign_id, spend_date, spend, impressions, clicks, conversions, reach, frequency, result_label, purchases, subscribes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON DUPLICATE KEY UPDATE spend = VALUES(spend), impressions = VALUES(impressions), clicks = VALUES(clicks),
-            conversions = VALUES(conversions), reach = VALUES(reach), frequency = VALUES(frequency), result_label = VALUES(result_label)
+            conversions = VALUES(conversions), reach = VALUES(reach), frequency = VALUES(frequency), result_label = VALUES(result_label),
+            purchases = VALUES(purchases), subscribes = VALUES(subscribes)
         ');
         foreach ($rows as $r) {
             if (empty($r['date']) || empty($r['campaign_id'])) continue;
             $up->execute([
                 $this->cred['id'], $r['campaign_id'], $r['date'], $r['spend'], $r['impressions'], $r['clicks'],
-                $r['result_count'], $r['reach'], $r['frequency'], $r['result_label'],
+                $r['result_count'], $r['reach'], $r['frequency'], $r['result_label'], $r['purchases'], $r['subscribes'],
             ]);
         }
         return $rows;
@@ -129,6 +141,18 @@ class FacebookAdsClient {
             }
         }
         return [0, null];
+    }
+
+    /** Lấy một action theo thứ tự ưu tiên; không cộng các alias để tránh đếm trùng cùng một event. */
+    private static function pickActionCount(array $actions, array $types): int {
+        $byType = [];
+        foreach ($actions as $a) {
+            $byType[$a['action_type'] ?? ''] = (int)($a['value'] ?? 0);
+        }
+        foreach ($types as $type) {
+            if (!empty($byType[$type])) return $byType[$type];
+        }
+        return 0;
     }
 
     public function testConnection(): array {
