@@ -312,8 +312,7 @@ function renderTopCampaignTable(campaigns, tab) {
       cpaCell = fmtMoney(tc.cpa);
     } else {
       const resultParts = [], costParts = [];
-      if ((tc.messages||0) > 0) { resultParts.push('Tin nhắn: ' + fmtNum(tc.messages)); costParts.push('Tin nhắn: ' + fmtMoney(Math.round(tc.spend/tc.messages))); }
-      if (tc.result_label && !['Tin nhắn','Lead','Lượt mua','Đăng ký'].includes(tc.result_label)) {
+      if (tc.result_label && !['Lượt mua','Đăng ký'].includes(tc.result_label)) {
         resultParts.push(escapeHtmlG(tc.result_label) + ': ' + fmtNum(tc.conversions||0));
         costParts.push(escapeHtmlG(tc.result_label) + ': ' + fmtMoney(tc.cost_per_result||0));
       }
@@ -442,7 +441,8 @@ function renderGroupBreakdown(data) {
         const platformBadge = '<span class="badge ' + (c.platform === 'google' ? 'badge-accent' : 'badge-warn') + '">' + (c.platform||'').substring(0,2).toUpperCase() + '</span>';
         const convCell = c.platform === 'google'
           ? c.conversions + ' <span class="muted">(CPA ' + fmtMoney(c.cpa) + ')</span>'
-          : 'Tin nhắn: ' + (c.messages||0) + ' · Mua: ' + (c.purchases||0) + ' · ĐK: ' + (c.subscribes||0);
+          : ((c.result_label && !['Lượt mua','Đăng ký'].includes(c.result_label)) ? escapeHtmlG(c.result_label) + ': ' + (c.conversions||0) + ' · ' : '') +
+            'Mua: ' + (c.purchases||0) + ' · ĐK: ' + (c.subscribes||0);
         html += '<tr>' +
           '<td><strong>' + escapeHtmlG(c.name) + '</strong></td>' +
           '<td>' + platformBadge + ' <span class="muted" style="font-size:12px">' + escapeHtmlG(c.account_label||'') + '</span></td>' +

@@ -159,7 +159,6 @@ CREATE TABLE IF NOT EXISTS ads_spend_cache (
   result_label VARCHAR(60) NULL,
   purchases INT NOT NULL DEFAULT 0,
   subscribes INT NOT NULL DEFAULT 0,
-  messages INT NOT NULL DEFAULT 0,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (credential_id, campaign_id, spend_date),
   CONSTRAINT fk_spend_cred FOREIGN KEY (credential_id) REFERENCES ads_credentials(id) ON DELETE CASCADE

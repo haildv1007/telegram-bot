@@ -86,11 +86,6 @@ class FacebookAdsClient {
 
             foreach ($data['data'] ?? [] as $r) {
                 [$resultCount, $resultLabel] = self::pickResult($r['actions'] ?? []);
-                $messages = self::pickActionCount($r['actions'] ?? [], [
-                    'onsite_conversion.messaging_conversation_started_7d',
-                    'onsite_conversion.messaging_first_reply',
-                    'onsite_conversion.total_messaging_connection',
-                ], ['messaging_conversation', 'messaging_first_reply']);
                 $purchases = self::pickActionCount($r['actions'] ?? [], [
                     'omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase', 'onsite_conversion.purchase',
                     ...$customActions['purchase'],
@@ -114,7 +109,6 @@ class FacebookAdsClient {
                     'result_label' => $resultLabel,
                     'purchases' => $purchases,
                     'subscribes' => $subscribes,
-                    'messages' => $messages,
                     // Chỉ trả về trong preview sync để chẩn đoán tên action mới từ Meta; không lưu DB.
                     'action_types' => array_values(array_map(fn($a) => [
                         'type' => (string)($a['action_type'] ?? ''),
@@ -128,18 +122,17 @@ class FacebookAdsClient {
 
         // Upsert cache
         $up = $this->db->prepare('
-          INSERT INTO ads_spend_cache (credential_id, campaign_id, spend_date, spend, impressions, clicks, conversions, reach, frequency, result_label, purchases, subscribes, messages)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO ads_spend_cache (credential_id, campaign_id, spend_date, spend, impressions, clicks, conversions, reach, frequency, result_label, purchases, subscribes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON DUPLICATE KEY UPDATE spend = VALUES(spend), impressions = VALUES(impressions), clicks = VALUES(clicks),
             conversions = VALUES(conversions), reach = VALUES(reach), frequency = VALUES(frequency), result_label = VALUES(result_label),
-            purchases = VALUES(purchases), subscribes = VALUES(subscribes), messages = VALUES(messages)
+            purchases = VALUES(purchases), subscribes = VALUES(subscribes)
         ');
         foreach ($rows as $r) {
             if (empty($r['date']) || empty($r['campaign_id'])) continue;
             $up->execute([
                 $this->cred['id'], $r['campaign_id'], $r['date'], $r['spend'], $r['impressions'], $r['clicks'],
                 $r['result_count'], $r['reach'], $r['frequency'], $r['result_label'], $r['purchases'], $r['subscribes'],
-                $r['messages'],
             ]);
         }
         return $rows;

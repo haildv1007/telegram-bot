@@ -57,7 +57,6 @@ function campaign_rows(PDO $db, array $channel, string $start, string $end): arr
       SELECT s.credential_id AS cred_id, s.campaign_id, COALESCE(c.name, s.campaign_id) AS name, cr.platform, cr.account_label,
              SUM(s.spend) AS spend, SUM(s.impressions) AS impressions, SUM(s.clicks) AS clicks,
              SUM(s.conversions) AS conversions, SUM(s.purchases) AS purchases, SUM(s.subscribes) AS subscribes,
-             SUM(s.messages) AS messages,
              SUM(s.reach) AS reach, AVG(s.frequency) AS frequency,
              MAX(s.result_label) AS result_label
       FROM ads_spend_cache s
@@ -79,7 +78,6 @@ function campaign_rows(PDO $db, array $channel, string $start, string $end): arr
         $r['conversions'] = (int)$r['conversions'];
         $r['purchases'] = (int)$r['purchases'];
         $r['subscribes'] = (int)$r['subscribes'];
-        $r['messages'] = (int)$r['messages'];
         $r['reach'] = (int)$r['reach'];
         $r['frequency'] = (float)$r['frequency'];
         $r['ctr'] = $r['impressions'] > 0 ? ($r['clicks'] / $r['impressions']) * 100 : 0;

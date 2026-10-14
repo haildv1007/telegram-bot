@@ -74,7 +74,6 @@ $topCampaigns = $db->query("
     cr.platform, cr.account_label,
     SUM(s.spend) AS spend, SUM(s.impressions) AS impressions, SUM(s.clicks) AS clicks,
     SUM(s.conversions) AS conversions, SUM(s.purchases) AS purchases, SUM(s.subscribes) AS subscribes,
-    SUM(s.messages) AS messages,
     SUM(s.reach) AS reach, AVG(s.frequency) AS frequency,
     MAX(s.result_label) AS result_label
   FROM ads_spend_cache s
@@ -102,7 +101,6 @@ foreach ($topCampaigns as &$tc) {
     $tc['conversions'] = (int) $tc['conversions'];
     $tc['purchases'] = (int) $tc['purchases'];
     $tc['subscribes'] = (int) $tc['subscribes'];
-    $tc['messages'] = (int) $tc['messages'];
     $tc['reach'] = (int) $tc['reach'];
     $tc['frequency'] = (float) $tc['frequency'];
     $tc['cpl'] = $tc['leads_unique'] > 0 ? round($tc['spend'] / $tc['leads_unique']) : 0;
@@ -125,7 +123,7 @@ function range_channel_stats(PDO $db, array $channel, string $startDt, string $e
     if (empty($credIds) && !empty($channel['credential_id'])) $credIds = [(int)$channel['credential_id']];
 
     $spend = 0.0;
-    $conversions = 0; $purchases = 0; $subscribes = 0; $messages = 0;
+    $conversions = 0; $purchases = 0; $subscribes = 0;
     if (!empty($credIds)) {
         global $exRate, $currencyMap;
         $ph = implode(',', array_fill(0, count($credIds), '?'));
@@ -139,9 +137,9 @@ function range_channel_stats(PDO $db, array $channel, string $startDt, string $e
                 $params = array_merge($params, $campIds);
             }
         }
-        $q = $db->prepare("SELECT credential_id, SUM(spend) AS s, SUM(conversions) AS conv, SUM(purchases) AS purchases, SUM(subscribes) AS subscribes, SUM(messages) AS messages FROM ads_spend_cache WHERE credential_id IN ($ph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
+        $q = $db->prepare("SELECT credential_id, SUM(spend) AS s, SUM(conversions) AS conv, SUM(purchases) AS purchases, SUM(subscribes) AS subscribes FROM ads_spend_cache WHERE credential_id IN ($ph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
         $q->execute($params);
-        foreach ($q as $_r) { $spend += convertSpend((float)$_r['s'], (int)$_r['credential_id'], $exRate, $currencyMap); $conversions += (int)$_r['conv']; $purchases += (int)$_r['purchases']; $subscribes += (int)$_r['subscribes']; $messages += (int)$_r['messages']; }
+        foreach ($q as $_r) { $spend += convertSpend((float)$_r['s'], (int)$_r['credential_id'], $exRate, $currencyMap); $conversions += (int)$_r['conv']; $purchases += (int)$_r['purchases']; $subscribes += (int)$_r['subscribes']; }
     }
     if ($spend <= 0) {
         $bq = $db->prepare('SELECT COALESCE(SUM(budget),0) FROM ad_budget WHERE budget_date BETWEEN ? AND ? AND channel_id = ?');
@@ -152,7 +150,7 @@ function range_channel_stats(PDO $db, array $channel, string $startDt, string $e
     $total = count($keys);
     $unique = count(array_unique($keys));
     $cpa = $conversions > 0 ? round($spend / $conversions) : 0;
-    return ['leads' => $total, 'leads_unique' => $unique, 'spend' => $spend, 'cpl' => $unique > 0 ? round($spend / $unique) : 0, 'conversions' => $conversions, 'cpa' => $cpa, 'purchases' => $purchases, 'subscribes' => $subscribes, 'messages' => $messages];
+    return ['leads' => $total, 'leads_unique' => $unique, 'spend' => $spend, 'cpl' => $unique > 0 ? round($spend / $unique) : 0, 'conversions' => $conversions, 'cpa' => $cpa, 'purchases' => $purchases, 'subscribes' => $subscribes];
 }
 
 $channels = $db->query("

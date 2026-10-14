@@ -75,7 +75,6 @@ class DigestBuilder {
                     } else {
                         $resultLabel = $r['result_label'] ?: null;
                         $resultCount = (int)($r['conversions'] ?? 0);
-                        $messages = (int)($r['messages'] ?? 0);
                         $purchases = (int)($r['purchases'] ?? 0);
                         $subscribes = (int)($r['subscribes'] ?? 0);
 
@@ -86,8 +85,7 @@ class DigestBuilder {
                         $lines[] = "     CPC: " . number_format($cpc, 0, ',', '.') . "đ"
                                  . " · Spend: " . number_format($r['spend'], 0, ',', '.') . "đ";
                         $hasResult = false;
-                        if ($messages > 0) { $lines[] = "     Tin nhắn: {$messages} · Chi phí/tin nhắn: " . number_format(round($r['spend'] / $messages), 0, ',', '.') . "đ"; $hasResult = true; }
-                        if ($resultLabel && !in_array($resultLabel, ['Tin nhắn', 'Lead', 'Lượt mua', 'Đăng ký'], true) && $resultCount > 0) {
+                        if ($resultLabel && !in_array($resultLabel, ['Lượt mua', 'Đăng ký'], true) && $resultCount > 0) {
                             $resultCost = round($r['spend'] / $resultCount);
                             $lines[] = "     {$resultLabel}: {$resultCount} · Chi phí/K.quả: " . number_format($resultCost, 0, ',', '.') . "đ";
                             $hasResult = true;
@@ -156,7 +154,6 @@ class DigestBuilder {
           SELECT s.campaign_id, s.credential_id AS cred_id, COALESCE(c.name, s.campaign_id) AS name, cr.platform,
                  SUM(s.spend) AS spend, SUM(s.impressions) AS impressions, SUM(s.clicks) AS clicks,
                  SUM(s.conversions) AS conversions, SUM(s.purchases) AS purchases, SUM(s.subscribes) AS subscribes,
-                 SUM(s.messages) AS messages,
                  MAX(s.result_label) AS result_label
           FROM ads_spend_cache s
           LEFT JOIN campaigns c ON c.credential_id = s.credential_id AND c.platform_campaign_id = s.campaign_id
@@ -175,7 +172,6 @@ class DigestBuilder {
             $r['conversions'] = (int) $r['conversions'];
             $r['purchases'] = (int) $r['purchases'];
             $r['subscribes'] = (int) $r['subscribes'];
-            $r['messages'] = (int) $r['messages'];
 
             $lp = $db->prepare('SELECT dup_key FROM leads WHERE channel_id = ? AND platform_campaign_id = ? AND created_at BETWEEN ? AND ?');
             $lp->execute([$channel['id'], $r['campaign_id'], $start, $end]);
