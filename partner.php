@@ -151,7 +151,7 @@ if (isset($_GET['api'])) {
         if (empty($credIds) && !empty($ch['credential_id'])) $credIds = [(int)$ch['credential_id']];
 
         $chSpend = 0.0;
-        $chConv = 0; $chPurchases = 0; $chSubscribes = 0; $chMessages = 0; $chFacebookLeads = 0;
+        $chConv = 0; $chPurchases = 0; $chSubscribes = 0; $chMessages = 0;
         if (!empty($credIds)) {
             $cph = implode(',', array_fill(0, count($credIds), '?'));
             $params = array_merge($credIds, [$startDate, $endDate]);
@@ -164,7 +164,7 @@ if (isset($_GET['api'])) {
                     $params = array_merge($params, $campIds);
                 }
             }
-            $sq = $db->prepare("SELECT credential_id, SUM(spend) AS s, SUM(conversions) AS conv, SUM(purchases) AS purchases, SUM(subscribes) AS subscribes, SUM(messages) AS messages, SUM(facebook_leads) AS facebook_leads FROM ads_spend_cache WHERE credential_id IN ($cph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
+            $sq = $db->prepare("SELECT credential_id, SUM(spend) AS s, SUM(conversions) AS conv, SUM(purchases) AS purchases, SUM(subscribes) AS subscribes, SUM(messages) AS messages FROM ads_spend_cache WHERE credential_id IN ($cph) AND spend_date BETWEEN ? AND ?$extra GROUP BY credential_id");
             $sq->execute($params);
             foreach ($sq as $_r) {
                 $converted = (($currencyMap[(int)$_r['credential_id']] ?? 'VND') === 'USD') ? (float)$_r['s'] * $exRate : (float)$_r['s'];
@@ -173,7 +173,6 @@ if (isset($_GET['api'])) {
                 $chPurchases += (int)$_r['purchases'];
                 $chSubscribes += (int)$_r['subscribes'];
                 $chMessages += (int)$_r['messages'];
-                $chFacebookLeads += (int)$_r['facebook_leads'];
             }
         }
 
@@ -191,7 +190,7 @@ if (isset($_GET['api'])) {
             'cpl' => $chUnique > 0 ? round($chSpend / $chUnique) : 0,
             'conversions' => $chConv, 'cpa' => $chConv > 0 ? round($chSpend / $chConv) : 0,
             'purchases' => $chPurchases, 'subscribes' => $chSubscribes,
-            'messages' => $chMessages, 'facebook_leads' => $chFacebookLeads,
+            'messages' => $chMessages,
         ];
     }
 
@@ -226,7 +225,7 @@ if (isset($_GET['api'])) {
                 cr.platform, cr.account_label,
                 SUM(s.spend) AS spend, SUM(s.impressions) AS impressions, SUM(s.clicks) AS clicks,
                 SUM(s.conversions) AS conversions, SUM(s.purchases) AS purchases, SUM(s.subscribes) AS subscribes,
-                SUM(s.messages) AS messages, SUM(s.facebook_leads) AS facebook_leads,
+                SUM(s.messages) AS messages,
                 SUM(s.reach) AS reach, AVG(s.frequency) AS frequency,
                 MAX(s.result_label) AS result_label
             FROM ads_spend_cache s
@@ -251,7 +250,6 @@ if (isset($_GET['api'])) {
             $tc['purchases'] = (int)$tc['purchases'];
             $tc['subscribes'] = (int)$tc['subscribes'];
             $tc['messages'] = (int)$tc['messages'];
-            $tc['facebook_leads'] = (int)$tc['facebook_leads'];
             $tc['reach'] = (int)$tc['reach'];
             $tc['frequency'] = (float)$tc['frequency'];
             $tc['cpc'] = $tc['clicks'] > 0 ? round($tc['spend'] / $tc['clicks']) : 0;
@@ -586,7 +584,6 @@ function renderTopTable(campaigns, tab) {
     if (tc.platform === 'facebook') {
       const resultParts = [], costParts = [];
       if ((tc.messages||0) > 0) { resultParts.push(`Tin nhắn: ${fmtNum(tc.messages)}`); costParts.push(`Tin nhắn: ${fmtMoney(Math.round(tc.spend/tc.messages))}`); }
-      if ((tc.facebook_leads||0) > 0) { resultParts.push(`Lead FB: ${fmtNum(tc.facebook_leads)}`); costParts.push(`Lead FB: ${fmtMoney(Math.round(tc.spend/tc.facebook_leads))}`); }
       if (tc.result_label && !['Tin nhắn','Lead','Lượt mua','Đăng ký'].includes(tc.result_label)) { resultParts.push(`${escHtml(tc.result_label)}: ${fmtNum(tc.conversions||0)}`); costParts.push(`${escHtml(tc.result_label)}: ${fmtMoney(tc.cost_per_result||0)}`); }
       if ((tc.purchases||0) > 0) {
         resultParts.push(`Mua: ${fmtNum(tc.purchases)}`);

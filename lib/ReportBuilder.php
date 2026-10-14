@@ -179,7 +179,6 @@ class ReportBuilder {
                     $resultLabel = $r['result_label'] ?: null;
                     $resultCount = (int)($r['conversions'] ?? 0);
                     $messages = (int)($r['messages'] ?? 0);
-                    $facebookLeads = (int)($r['facebook_leads'] ?? 0);
                     $purchases = (int)($r['purchases'] ?? 0);
                     $subscribes = (int)($r['subscribes'] ?? 0);
 
@@ -194,7 +193,6 @@ class ReportBuilder {
 
                     $hasResult = false;
                     if ($messages > 0) { $lines[] = "   Tin nhắn: {$messages} · Chi phí/tin nhắn: " . number_format(round((float)$r['spend'] / $messages), 0, ',', '.') . "đ"; $hasResult = true; }
-                    if ($facebookLeads > 0) { $lines[] = "   Lead Facebook: {$facebookLeads} · Chi phí/lead FB: " . number_format(round((float)$r['spend'] / $facebookLeads), 0, ',', '.') . "đ"; $hasResult = true; }
                     if ($resultLabel && !in_array($resultLabel, ['Tin nhắn', 'Lead', 'Lượt mua', 'Đăng ký'], true) && $resultCount > 0) {
                         $resultCost = round((float)$r['spend'] / $resultCount);
                         $lines[] = "   {$resultLabel}: {$resultCount} · Chi phí/K.quả: " . number_format($resultCost, 0, ',', '.') . "đ";
@@ -250,13 +248,12 @@ class ReportBuilder {
             $lines[] = "— Tổng ngân sách" . ($isProgress ? " (tạm)" : "") . ": " . number_format($spendTotal, 0, ',', '.') . "đ"
                      . ($spendSource === 'ads_api' ? ' [Ads]' : ' [manual]');
 
-            $purchaseTotal = 0; $subscribeTotal = 0; $messageTotal = 0; $facebookLeadTotal = 0; $resultGroups = [];
+            $purchaseTotal = 0; $subscribeTotal = 0; $messageTotal = 0; $resultGroups = [];
             foreach ($groups as $g) {
                 foreach ($g['rows'] as $r) {
                     $purchaseTotal += (int)($r['purchases'] ?? 0);
                     $subscribeTotal += (int)($r['subscribes'] ?? 0);
                     $messageTotal += (int)($r['messages'] ?? 0);
-                    $facebookLeadTotal += (int)($r['facebook_leads'] ?? 0);
                     $label = $r['result_label'] ?? null;
                     $cnt = (int)($r['conversions'] ?? 0);
                     if ($label && !in_array($label, ['Tin nhắn', 'Lead', 'Lượt mua', 'Đăng ký'], true) && $cnt > 0) {
@@ -266,7 +263,6 @@ class ReportBuilder {
                 }
             }
             if ($messageTotal > 0) $lines[] = "— Tin nhắn: {$messageTotal} · Chi phí/tin nhắn: " . number_format(round($spendTotal / $messageTotal), 0, ',', '.') . "đ";
-            if ($facebookLeadTotal > 0) $lines[] = "— Lead Facebook: {$facebookLeadTotal} · Chi phí/lead FB: " . number_format(round($spendTotal / $facebookLeadTotal), 0, ',', '.') . "đ";
             foreach ($resultGroups as $label => $count) {
                 $cost = $count > 0 ? round($spendTotal / $count) : 0;
                 $lines[] = "— {$label}: {$count} · Chi phí/K.quả: " . number_format($cost, 0, ',', '.') . "đ";
@@ -276,7 +272,7 @@ class ReportBuilder {
                 $subscribeCost = $subscribeTotal > 0 ? round($spendTotal / $subscribeTotal) : 0;
                 $lines[] = "— Lượt mua: {$purchaseTotal} · Chi phí/mua: " . number_format($purchaseCost, 0, ',', '.') . "đ";
                 $lines[] = "— Đăng ký: {$subscribeTotal} · Chi phí/đăng ký: " . number_format($subscribeCost, 0, ',', '.') . "đ";
-            } elseif (empty($resultGroups) && $messageTotal === 0 && $facebookLeadTotal === 0) {
+            } elseif (empty($resultGroups) && $messageTotal === 0) {
                 $lines[] = "— Chưa có dữ liệu kết quả (camp chưa có action nào được ghi nhận).";
             }
         }
